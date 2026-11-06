@@ -1,0 +1,57 @@
+---
+// The site header: the site's name or logo (the slot) on the left, linking home; the language
+// links on the right. Sticky, translucent and blurred across the window, so it stays while the
+// page scrolls under it. The name's tap area is 44px tall.
+// The look comes from the site's CSS variables (--kit-header-*, --kit-wrap-*, --kit-brand-reach,
+// listed in README.md). Other attributes go onto <header>, e.g. transition:name="site-header"
+// transition:animate="none" to keep it still while Astro's ClientRouter changes pages.
+import LanguageNav from './LanguageNav.astro';
+import type { Locales } from './i18n.js';
+
+interface Props {
+  i18n: Locales<any>;
+  lang: string;
+  // The same page in each language it exists in.
+  alternates?: Partial<Record<string, string>>;
+  // Where the name links: the current language's home page by default.
+  home?: string;
+  class?: string;
+  [attribute: string]: unknown;
+}
+
+const { i18n, lang, alternates, home = i18n.localePath(lang), class: className, ...attributes } = Astro.props;
+---
+
+<header class:list={['kit-header', className]} {...attributes}>
+  <div class="kit-header-row">
+    <a class="kit-brand" href={home}><slot /></a>
+    <LanguageNav i18n={i18n} lang={lang} alternates={alternates} />
+  </div>
+</header>
+
+<style is:global>
+  .kit-header {
+    position: sticky; top: 0; z-index: var(--kit-header-z, 10);
+    border-bottom: var(--kit-header-border, 0);
+    background-color: var(--paper);
+    -webkit-backdrop-filter: blur(var(--kit-header-blur, 12px));
+    backdrop-filter: blur(var(--kit-header-blur, 12px));
+  }
+  /* Translucent where the browser can mix colours; plain paper where it can't. */
+  @supports (color: color-mix(in lab, red, red)) {
+    .kit-header { background-color: var(--kit-header-bg, color-mix(in srgb, var(--paper) 85%, transparent)); }
+  }
+  /* One row as wide as the page's column, with the same side padding. */
+  .kit-header-row {
+    box-sizing: border-box; display: flex; align-items: center; justify-content: space-between;
+    width: 100%; max-width: var(--kit-wrap-max, 72rem); min-height: var(--kit-header-height, 3.5rem);
+    margin-inline: auto; padding-inline: var(--kit-wrap-pad, 1rem);
+  }
+  /* The tap area can reach past the name toward the screen edge (--kit-brand-reach) while the
+     letters stay on the page's left edge. */
+  .kit-brand {
+    display: inline-flex; align-items: center; min-height: 44px;
+    margin-inline-start: calc(-1 * var(--kit-brand-reach, 0px)); padding-inline: var(--kit-brand-reach, 0px);
+    white-space: nowrap; color: var(--ink); text-decoration-line: none;
+  }
+</style>

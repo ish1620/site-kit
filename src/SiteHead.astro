@@ -1,0 +1,106 @@
+---
+// The tags every page's <head> starts with: the basics, icons, the address search engines should
+// use, the page's other languages, link previews and structured data. The site keeps <html> and
+// <head> in its own layout and puts this first inside <head>, then anything of its own (font
+// preloads, a feed link, ClientRouter).
+//
+// Needs in public/: favicon.svg, favicon.ico (32×32) and apple-touch-icon.png (unless icons={false});
+// src/pages/lang-redirect.js.ts (routes.js) unless langRedirect={false}.
+import type { Locales } from './i18n.js';
+
+interface Props {
+  i18n: Locales<any>;
+  lang: string;
+  siteName: string;
+  // The page's own title. The browser tab shows "title | site name" (titleSeparator), previews
+  // show the title alone; without one, both show the site name.
+  title?: string;
+  titleSeparator?: string;
+  description: string;
+  // The same page in each language it exists in (hreflang). x-default, shown to everyone else, is
+  // the default language's version, or the first translation if there is none.
+  alternates?: Partial<Record<string, string>>;
+  // Link-preview image under public/ (or a full URL), with its size in pixels. Pass it only if the
+  // file exists.
+  image?: { src: string; width: number; height: number };
+  // X's card: the wide one when there's an image, unless the image is square ("summary").
+  card?: 'summary' | 'summary_large_image';
+  type?: 'website' | 'article';
+  publishedTime?: Date;
+  noindex?: boolean; // keep the page out of search results
+  // The phones' toolbar colour: the site's --paper (a meta tag can't read CSS variables).
+  themeColor: string;
+  // Structured data (schema.org), built by the site.
+  jsonLd?: Record<string, unknown>;
+  icons?: boolean;
+  langRedirect?: boolean;
+}
+
+const {
+  i18n, lang, siteName, title, titleSeparator = ' | ', description, alternates = {}, image,
+  type = 'website', publishedTime, noindex, themeColor, jsonLd, icons = true, langRedirect = true,
+} = Astro.props;
+const { LOCALES, DEFAULT_LOCALE, LANG_TAG, OG_LOCALE, localePath } = i18n;
+
+const pageTitle = title ? `${title}${titleSeparator}${siteName}` : siteName;
+const previewTitle = title ?? siteName;
+// The site's own address with this page's path set on it: the host can never change, even if a
+// page rendered per request is asked for an odd path like //other.example/.
+const canonicalUrl = new URL(Astro.site!);
+canonicalUrl.pathname = Astro.url.pathname;
+const canonicalHref = canonicalUrl.href;
+const defaultHref = alternates[DEFAULT_LOCALE] ?? Object.values(alternates).find(Boolean);
+const imageHref = image && new URL(image.src, Astro.site).href;
+const card = Astro.props.card ?? (image ? 'summary_large_image' : 'summary');
+// The bare home page (/) first checks whether the visitor chose another language before.
+const isDefaultHome = Astro.url.pathname === localePath(DEFAULT_LOCALE);
+---
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+{langRedirect && isDefaultHome && <script is:inline src="/lang-redirect.js"></script>}
+<title>{pageTitle}</title>
+<meta name="description" content={description} />
+{noindex && <meta name="robots" content="noindex" />}
+<meta name="theme-color" content={themeColor} />
+{icons && (
+  <>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    {/* sizes="32x32": Chrome then prefers the sharper SVG above. */}
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  </>
+)}
+<link rel="canonical" href={canonicalHref} />
+{Object.entries(alternates).map(([l, path]) => path && (
+  <link rel="alternate" hreflang={LANG_TAG[l]} href={new URL(path, Astro.site).href} />
+))}
+{defaultHref && <link rel="alternate" hreflang="x-default" href={new URL(defaultHref, Astro.site).href} />}
+<link rel="sitemap" href="/sitemap-index.xml" />
+
+{/* Link previews in messaging apps and social sites (Open Graph; X reads the twitter:* tags). */}
+<meta property="og:type" content={type} />
+<meta property="og:site_name" content={siteName} />
+<meta property="og:title" content={previewTitle} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonicalHref} />
+<meta property="og:locale" content={OG_LOCALE[lang]} />
+{LOCALES.filter((l: string) => l !== lang && alternates[l]).map((l: string) => (
+  <meta property="og:locale:alternate" content={OG_LOCALE[l]} />
+))}
+{image && (
+  <>
+    <meta property="og:image" content={imageHref} />
+    <meta property="og:image:width" content={String(image.width)} />
+    <meta property="og:image:height" content={String(image.height)} />
+    <meta property="og:image:alt" content={previewTitle} />
+  </>
+)}
+{type === 'article' && publishedTime && <meta property="article:published_time" content={publishedTime.toISOString()} />}
+<meta name="twitter:card" content={card} />
+<meta name="twitter:title" content={previewTitle} />
+<meta name="twitter:description" content={description} />
+{image && <meta name="twitter:image" content={imageHref} />}
+{/* Data, not code, so a strict Content Security Policy allows it. Every "<" is replaced by its
+    JSON escape, so text like "</script>" in a title can't end this tag early. */}
+{jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd).replace(/</g, '\\u003c')} />}

@@ -1,0 +1,26 @@
+---
+// "Skip to content": the page's first link. Hidden until it has keyboard focus, then shown in the
+// top-left corner, above everything (the sticky header included).
+import type { Locales } from './i18n.js';
+
+interface Props {
+  i18n: Locales<any>;
+  lang: string;
+  target?: string; // the main content's id, "#main" by default
+}
+
+const { i18n, lang, target = '#main' } = Astro.props;
+---
+
+<a class="kit-skip" href={target}>{i18n.KIT_UI[lang].skip}</a>
+
+<style is:global>
+  .kit-skip:not(:focus) {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
+  .kit-skip:focus {
+    position: fixed; top: 1rem; left: 1rem; z-index: 100; padding: .5rem .75rem;
+    background: var(--paper); font-size: var(--kit-skip-size, .875rem);
+  }
+</style>

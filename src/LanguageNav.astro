@@ -1,0 +1,78 @@
+---
+// The language links: one lowercase code per language (en es ja zh), in the site's order.
+// - the current language: a plain word, underlined, marked aria-current;
+// - a language this page exists in: a link to that version;
+// - one it doesn't exist in: a faint word, not a link.
+// The visible code is the accessible name, so voice control can follow what it sees ("click es");
+// the language's own name ("Español") is the tooltip, and lang="" has each code read in its own
+// language. Tap areas are 44px tall.
+// A plain click on a code is remembered (the script below), so the bare home page opens in that
+// language next time (langRedirect in routes.js).
+// The look comes from the site's CSS variables (--kit-lang-*, listed in README.md).
+import type { Locales } from './i18n.js';
+
+interface Props {
+  i18n: Locales<any>;
+  lang: string;
+  // The same page in each language it exists in.
+  alternates?: Partial<Record<string, string>>;
+}
+
+const { i18n, lang, alternates = {} } = Astro.props;
+const { LOCALES, LANG_TAG, LANG_NAME, KIT_UI } = i18n;
+---
+
+<nav class="kit-langs" aria-label={KIT_UI[lang].langNav}>
+  {LOCALES.map((l: string) => {
+    const tag = LANG_TAG[l];
+    const name = LANG_NAME[l];
+    if (l === lang) return <span class="kit-lang" aria-current="page" lang={tag} title={name}>{l}</span>;
+    const href = alternates[l];
+    if (!href) return <span class="kit-lang kit-lang-missing" lang={tag} title={name}>{l}</span>;
+    return <a class="kit-lang" href={href} hreflang={tag} lang={tag} title={name} data-lang={l}>{l}</a>;
+  })}
+</nav>
+
+<script>
+  // Tells /lang-redirect.js that the site is running, so in-site navigation to the home page (with
+  // Astro's ClientRouter) never redirects. First line on purpose: an error further down can't skip it.
+  Object.assign(window, { siteKitLoaded: true });
+
+  // Remember the language a visitor switches to: one word in the visitor's own browser, never sent
+  // anywhere; no cookies. Only a plain click that switches this page counts; opening a language in
+  // a new tab (cmd/ctrl/shift-click, middle-click) doesn't, the same rule Astro's router uses.
+  // data-lang holds the short code ("zh"), which /lang-redirect.js looks up; hreflang holds the
+  // full tag ("zh-Hans"). Astro bundles this into a file when the site sets
+  // vite.build.assetsInlineLimit: 0 (README.md), so a strict Content Security Policy allows it.
+  document.addEventListener('click', (event) => {
+    if (event.button || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    const link = event.target instanceof Element ? event.target.closest('.kit-langs a[data-lang]') : null;
+    const lang = link?.getAttribute('data-lang');
+    if (lang) try { localStorage.setItem('lang', lang); } catch { /* storage blocked: nothing saved */ }
+  });
+</script>
+
+<style is:global>
+  .kit-langs {
+    display: flex; flex-shrink: 0; align-items: center;
+    gap: var(--kit-lang-gap, 0);
+    /* The last code's tap area reaches past its letters toward the screen edge, so the letters
+       stay on the page's edge. */
+    margin-inline-end: calc(-1 * var(--kit-lang-reach, 0px));
+    font-family: var(--kit-lang-font, inherit);
+    font-size: var(--kit-lang-size, .8125rem);
+    letter-spacing: var(--kit-lang-tracking, .02em);
+  }
+  .kit-lang {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 44px; min-width: var(--kit-lang-min-width, 0); padding-inline: var(--kit-lang-pad, 0);
+    color: var(--ink-muted);
+    text-decoration-line: none; text-decoration-thickness: var(--kit-lang-underline-thickness, 1px);
+    text-underline-offset: var(--kit-lang-underline-offset, 4px);
+  }
+  .kit-lang[aria-current] { color: var(--ink); text-decoration-line: underline; }
+  .kit-lang-missing { color: var(--ink-faint); }
+  @media (hover: hover) {
+    a.kit-lang:hover { color: var(--kit-lang-hover, var(--ink)); }
+  }
+</style>
