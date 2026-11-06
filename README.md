@@ -45,6 +45,12 @@ The blocks use the site's `--paper`, `--ink`, `--ink-muted` and `--ink-faint`, a
 
 Reach variables need a unit (`0px`, not `0`): they are used in `calc()`.
 
+## Checking the sites after a change
+
+`scripts/check_sites.py` builds each site before and after a change to a block and compares the
+pages (head tags, header, content, CSS rules and scripts); `scripts/measure-header.js` measures the
+header in a browser. Neither is installed into the sites.
+
 ## Strict Content Security Policy
 
 The blocks contain no inline code. For a policy without `'unsafe-inline'`, the site also sets
