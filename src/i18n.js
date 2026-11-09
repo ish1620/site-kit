@@ -34,6 +34,10 @@ export function defineLocales({ locales, defaultLocale }) {
     return clean ? `${base}${clean}/` : base;
   }
 
+  // The language part of an address, for page files in src/pages/[...lang]/: nothing for the
+  // default language, the code for the others.
+  const langParam = (lang) => (lang === defaultLocale ? undefined : lang);
+
   return {
     LOCALES: locales,
     DEFAULT_LOCALE: defaultLocale,
@@ -43,9 +47,13 @@ export function defineLocales({ locales, defaultLocale }) {
     LANG_NAME_EN: pick('nameEn'),
     KIT_UI: pick('ui'),
     localePath,
-    // The language part of an address, for page files in src/pages/[...lang]/: nothing for the
-    // default language, the code for the others.
-    langParam: (lang) => (lang === defaultLocale ? undefined : lang),
+    langParam,
+    // One page per language (every language by default), for a page file in src/pages/[...lang]/:
+    // export function getStaticPaths() { return staticPaths(); }
+    staticPaths: (langs = locales) => langs.map((lang) => ({ params: { lang: langParam(lang) }, props: { lang } })),
+    // The same page's address in each language (every language by default), for the alternates
+    // SiteHead and SiteHeader take: alternatesOf('archive') gives { en: '/archive/', es: '/es/archive/', ... }.
+    alternatesOf: (path = '', langs = locales) => Object.fromEntries(langs.map((lang) => [lang, localePath(lang, path)])),
     // For @astrojs/sitemap: sitemap({ i18n: i18n.sitemap }) links the language versions.
     sitemap: { defaultLocale, locales: LANG_TAG },
   };

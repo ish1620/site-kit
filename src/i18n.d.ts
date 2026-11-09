@@ -26,6 +26,10 @@ export interface Locales<L extends LanguageCode = LanguageCode> {
   KIT_UI: Record<L, KitUI>;
   localePath(lang: L, path?: string): string;
   langParam(lang: L): L | undefined;
+  /** One page per language (every language by default): `export function getStaticPaths() { return staticPaths(); }` */
+  staticPaths(langs?: readonly L[]): { params: { lang: L | undefined }; props: { lang: L } }[];
+  /** The same page's address in each language (every language by default), for `alternates`. */
+  alternatesOf(path?: string, langs?: readonly L[]): Partial<Record<L, string>>;
   sitemap: { defaultLocale: L; locales: Record<L, string> };
 }
 

@@ -7,7 +7,13 @@ sites; not a general-purpose package.
 ## Blocks
 
 - `site-kit/i18n`: `defineLocales({ locales, defaultLocale })`: language tags, names, addresses
-  (`localePath()`, `langParam()`) and the sitemap's language settings.
+  (`localePath()`, `langParam()`, `staticPaths()` for a page in every language, `alternatesOf()`
+  for the same page's other languages) and the sitemap's language settings.
+- `site-kit/content`: for content kept in one folder per language (`<lang>/<slug>.md`):
+  `langOf()`, `slugOf()`, `isScheduled()`, `languagesOf()`, and two build checks:
+  `checkPublishDates()` (a date has a time and a time zone) and `checkTranslations()` (every
+  language version's front matter matches the original's, apart from the translated fields). They
+  work on the entries the site passes in.
 - `site-kit/SiteHead.astro`: the tags a page's `<head>` starts with (title, description, icons,
   canonical, hreflang, link previews, JSON-LD).
 - `site-kit/SkipLink.astro`: "Skip to content", shown on keyboard focus.
@@ -47,6 +53,7 @@ Reach variables need a unit (`0px`, not `0`): they are used in `calc()`.
 
 ## Checking the sites after a change
 
+`npm test` runs the tests of the JavaScript modules (Node's own test runner; no dependencies).
 `scripts/check_sites.py` builds each site before and after a change to a block and compares the
 pages (head tags, header, content, CSS rules and scripts); `scripts/measure-header.js` measures the
 header in a browser. Neither is installed into the sites.

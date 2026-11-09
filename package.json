@@ -1,12 +1,13 @@
 {
   "name": "site-kit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Shared building blocks for ishokutani.com and calle.ishokutani.com",
   "type": "module",
   "keywords": ["astro-component"],
   "exports": {
     "./i18n": { "types": "./src/i18n.d.ts", "default": "./src/i18n.js" },
+    "./content": { "types": "./src/content.d.ts", "default": "./src/content.js" },
     "./markdown": { "types": "./src/markdown.d.ts", "default": "./src/markdown.js" },
     "./routes": { "types": "./src/routes.d.ts", "default": "./src/routes.js" },
     "./SiteHead.astro": "./src/SiteHead.astro",
@@ -15,6 +16,9 @@
     "./LanguageNav.astro": "./src/LanguageNav.astro"
   },
   "files": ["src"],
+  "scripts": {
+    "test": "node --test"
+  },
   "peerDependencies": {
     "astro": "^7.0.0"
   }
