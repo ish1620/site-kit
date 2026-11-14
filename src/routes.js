@@ -13,8 +13,6 @@ export function robotsTxt(site) {
 // language code; nothing is sent anywhere, no cookies. SiteHead loads this file at the very top of
 // the default language's home page only, as a plain blocking script, so the jump happens before
 // that page is drawn. It does nothing when:
-// - the site is already running (in-site navigation with Astro's ClientRouter, where the referrer
-//   stays the first page's; LanguageNav's script sets window.siteKitLoaded),
 // - the visitor came from another page of this site (they chose to go home, e.g. in a new tab),
 // - nothing (or the default language, or an unknown value) is saved, or storage is blocked.
 // While the jump happens the page is hidden, so a slow connection can't flash it; it shows again
@@ -23,7 +21,6 @@ export function langRedirect({ LOCALES, DEFAULT_LOCALE, localePath }) {
   const homes = Object.fromEntries(LOCALES.filter((l) => l !== DEFAULT_LOCALE).map((l) => [l, localePath(l)]));
   const script = `(function () {
   try {
-    if (window.siteKitLoaded) return;
     if (document.referrer && new URL(document.referrer).origin === location.origin) return;
     var homes = ${JSON.stringify(homes)};
     var lang = localStorage.getItem('lang');

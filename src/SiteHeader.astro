@@ -3,8 +3,7 @@
 // links on the right. Sticky, translucent and blurred across the window, so it stays while the
 // page scrolls under it. The name's tap area is 44px tall.
 // The look comes from the site's CSS variables (--kit-header-*, --kit-wrap-*, --kit-brand-reach,
-// listed in README.md). Other attributes go onto <header>, e.g. transition:name="site-header"
-// transition:animate="none" to keep it still while Astro's ClientRouter changes pages.
+// listed in README.md). Other attributes (an id, data- attributes) go onto <header>.
 import LanguageNav from './LanguageNav.astro';
 import type { Locales } from './i18n.js';
 

@@ -34,13 +34,9 @@ const { LOCALES, LANG_TAG, LANG_NAME, KIT_UI } = i18n;
 </nav>
 
 <script>
-  // Tells /lang-redirect.js that the site is running, so in-site navigation to the home page (with
-  // Astro's ClientRouter) never redirects. First line on purpose: an error further down can't skip it.
-  Object.assign(window, { siteKitLoaded: true });
-
   // Remember the language a visitor switches to: one word in the visitor's own browser, never sent
   // anywhere; no cookies. Only a plain click that switches this page counts; opening a language in
-  // a new tab (cmd/ctrl/shift-click, middle-click) doesn't, the same rule Astro's router uses.
+  // a new tab (cmd/ctrl/shift-click, middle-click) doesn't.
   // data-lang holds the short code ("zh"), which /lang-redirect.js looks up; hreflang holds the
   // full tag ("zh-Hans"). Astro bundles this into a file when the site sets
   // vite.build.assetsInlineLimit: 0 (README.md), so a strict Content Security Policy allows it.
