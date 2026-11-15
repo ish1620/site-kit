@@ -17,7 +17,7 @@
   },
   "files": ["src"],
   "scripts": {
-    "test": "node --test"
+    "test": "node --test && python3 -I -B -m unittest discover -s test"
   },
   "peerDependencies": {
     "astro": "^7.0.0"

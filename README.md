@@ -53,7 +53,8 @@ Reach variables need a unit (`0px`, not `0`): they are used in `calc()`.
 
 ## Checking the sites after a change
 
-`npm test` runs the tests of the JavaScript modules (Node's own test runner; no dependencies).
+`npm test` runs the tests of the JavaScript modules (Node's own test runner) and of
+`scripts/check_sites.py` (Python's `unittest`); neither needs a dependency.
 `scripts/check_sites.py` builds each site before and after a change to a block and compares the
 pages (head tags, header, content, CSS rules and scripts); `scripts/measure-header.js` measures the
 header in a browser. Neither is installed into the sites.
