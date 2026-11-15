@@ -23,6 +23,8 @@ general-purpose package.
 - `site-kit/routes`: `robotsTxt()` and `langRedirect()` for `/robots.txt` and `/lang-redirect.js`
   (the second only on a site with more than one language).
 - `site-kit/markdown`: `lineBreaks`, a Markdown rule that keeps single line breaks.
+- `site-kit/headers`: `securityHeaders()`, an Astro integration that writes the shared `/*`
+  security headers into `dist/_headers` ahead of the site's own rules.
 
 ## Look
 
@@ -60,8 +62,16 @@ Reach variables need a unit (`0px`, not `0`): they are used in `calc()`.
 pages (head tags, header, content, CSS rules and scripts); `scripts/measure-header.js` measures the
 header in a browser. Neither is installed into the sites.
 
-## Strict Content Security Policy
+## Security headers
 
-The blocks contain no inline code. For a policy without `'unsafe-inline'`, the site also sets
+`securityHeaders()` writes the shared `/*` security-header block (strict CSP, `X-Content-Type-Options`,
+`X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`,
+`Cross-Origin-Resource-Policy`, `Strict-Transport-Security`) to `dist/_headers` ahead of the site's
+own `public/_headers` rules (caching, `!` removals), and stops the build if a site rule sets a
+header the block already sets.
+
+The blocks contain no inline code. For the policy without `'unsafe-inline'`, the site also sets
 `build: { inlineStylesheets: 'never' }` and `vite: { build: { assetsInlineLimit: 0 } }` in
-`astro.config.mjs`, so Astro keeps every style and script in a file.
+`astro.config.mjs`, so Astro keeps every style and script in a file. A path that needs an
+exception (for instance, an image loaded by another origin) drops the header after the block with
+`! <Header>` in `public/_headers`.

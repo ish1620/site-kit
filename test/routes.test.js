@@ -45,6 +45,10 @@ test('robotsTxt allows everything and gives the full address of the sitemap, as 
   }
 });
 
+test('robotsTxt without the site address says to set site in astro.config.mjs', () => {
+  assert.throws(() => robotsTxt(undefined), /set `site` in astro\.config\.mjs/);
+});
+
 test('langRedirect answers with JavaScript', () => {
   const response = langRedirect(i18n);
   assert.equal(response.status, 200);

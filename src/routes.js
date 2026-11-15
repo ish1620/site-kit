@@ -4,6 +4,8 @@
 // /robots.txt: everything may be crawled; the sitemap lists the pages that should be found. Pages
 // kept out of search say so themselves (noindex).
 export function robotsTxt(site) {
+  // Astro passes the `site` of astro.config.mjs; without one, new URL() would only say "Invalid URL".
+  if (!site) throw new Error('robotsTxt: no site address; set `site` in astro.config.mjs');
   const body = `User-agent: *\nAllow: /\n\nSitemap: ${new URL('sitemap-index.xml', site).href}\n`;
   return new Response(body, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
 }
