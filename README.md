@@ -1,8 +1,8 @@
 # site-kit
 
-Shared Astro building blocks for ishokutani.com and calle.ishokutani.com. Each block is built the
-same way on every site; each site sets its look with `--kit-*` CSS variables. Made for these two
-sites; not a general-purpose package.
+Shared Astro building blocks for a few personal sites. Each block is built the same way on every
+site; each site sets its look with `--kit-*` CSS variables. Made for those sites; not a
+general-purpose package.
 
 ## Blocks
 
