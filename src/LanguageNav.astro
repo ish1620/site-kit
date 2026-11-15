@@ -8,6 +8,8 @@
 // language. Tap areas are 44px tall.
 // A plain click on a code is remembered (the script below), so the bare home page opens in that
 // language next time (langRedirect in routes.js).
+// SiteHeader leaves this component out on a one-language site: drawn there, it would show the one
+// code and add its script to the page.
 // The look comes from the site's CSS variables (--kit-lang-*, listed in README.md).
 import type { Locales } from './i18n.js';
 

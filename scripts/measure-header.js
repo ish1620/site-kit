@@ -2,7 +2,8 @@
 // details: every box and the letters' positions, colours, fonts, underlines and blur. Run it in the
 // browser's console (or a browser tool) on the same page of the build from before a change and the
 // build after, at 1280, 375 and 320px wide: the fingerprints should match. A code without an
-// underline leaves its underline settings out, since they draw nothing.
+// underline leaves its underline settings out, since they draw nothing. A one-language site's
+// header has no language links (nav.kit-langs): its nav line reads "nav none", with no codes.
 (() => {
   const header = document.querySelector('header');
   const round = (v) => Math.round(v * 100) / 100;
@@ -10,7 +11,7 @@
   const textBox = (el) => { const r = document.createRange(); r.selectNodeContents(el); return box(r); };
   const style = (el, props) => { const s = getComputedStyle(el); return props.map((p) => s.getPropertyValue(p)).join(' / '); };
   const brand = header.querySelector('a');
-  const nav = header.querySelector('nav');
+  const nav = header.querySelector('nav.kit-langs');
   const logo = brand.querySelector('svg, img');
   let letters = '';
   if (logo) letters = 'logo ' + box(logo);
@@ -22,10 +23,12 @@
     'width ' + innerWidth,
     'header ' + box(header) + ' | ' + style(header, ['z-index', 'background-color', 'backdrop-filter', 'border-bottom-width', 'border-bottom-color']),
     'name ' + box(brand) + ' ' + letters + ' | ' + style(brand, ['color']),
-    'nav ' + box(nav) + ' | ' + style(nav, ['font-family', 'font-size', 'letter-spacing']),
-    ...[...nav.children].map((c) => c.textContent + ' ' + box(c) + ' text ' + textBox(c) + ' | '
-      + style(c, ['color', 'text-decoration-line'])
-      + (c.matches('[aria-current]') ? ' / ' + style(c, ['text-decoration-thickness', 'text-underline-offset']) : '')),
+    ...(nav ? [
+      'nav ' + box(nav) + ' | ' + style(nav, ['font-family', 'font-size', 'letter-spacing']),
+      ...[...nav.children].map((c) => c.textContent + ' ' + box(c) + ' text ' + textBox(c) + ' | '
+        + style(c, ['color', 'text-decoration-line'])
+        + (c.matches('[aria-current]') ? ' / ' + style(c, ['text-decoration-thickness', 'text-underline-offset']) : '')),
+    ] : ['nav none']),
     'main ' + box(document.querySelector('main')),
   ];
   const text = lines.join('\n');

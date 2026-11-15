@@ -15,12 +15,13 @@ sites; not a general-purpose package.
   language version's front matter matches the original's, apart from the translated fields). They
   work on the entries the site passes in.
 - `site-kit/SiteHead.astro`: the tags a page's `<head>` starts with (title, description, icons,
-  canonical, hreflang, link previews, JSON-LD).
+  canonical, hreflang, link previews with an optional description of the image, JSON-LD).
 - `site-kit/SkipLink.astro`: "Skip to content", shown on keyboard focus.
 - `site-kit/SiteHeader.astro`: a sticky header; the slot is the site's name or logo, the language
-  links sit on the right.
+  links sit on the right (a site with one language has none).
 - `site-kit/LanguageNav.astro`: the language links, and remembering the chosen language.
-- `site-kit/routes`: `robotsTxt()` and `langRedirect()` for `/robots.txt` and `/lang-redirect.js`.
+- `site-kit/routes`: `robotsTxt()` and `langRedirect()` for `/robots.txt` and `/lang-redirect.js`
+  (the second only on a site with more than one language).
 - `site-kit/markdown`: `lineBreaks`, a Markdown rule that keeps single line breaks.
 
 ## Look

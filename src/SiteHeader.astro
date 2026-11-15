@@ -1,7 +1,8 @@
 ---
 // The site header: the site's name or logo (the slot) on the left, linking home; the language
-// links on the right. Sticky, translucent and blurred across the window, so it stays while the
-// page scrolls under it. The name's tap area is 44px tall.
+// links on the right. A one-language site gets no language links: LanguageNav isn't drawn, so no
+// page carries its markup or loads its script. Sticky, translucent and blurred across the window,
+// so it stays while the page scrolls under it. The name's tap area is 44px tall.
 // The look comes from the site's CSS variables (--kit-header-*, --kit-wrap-*, --kit-brand-reach,
 // listed in README.md). Other attributes (an id, data- attributes) go onto <header>.
 import LanguageNav from './LanguageNav.astro';
@@ -24,7 +25,7 @@ const { i18n, lang, alternates, home = i18n.localePath(lang), class: className, 
 <header class:list={['kit-header', className]} {...attributes}>
   <div class="kit-header-row">
     <a class="kit-brand" href={home}><slot /></a>
-    <LanguageNav i18n={i18n} lang={lang} alternates={alternates} />
+    {i18n.LOCALES.length > 1 && <LanguageNav i18n={i18n} lang={lang} alternates={alternates} />}
   </div>
 </header>
 

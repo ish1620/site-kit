@@ -12,7 +12,8 @@ export function robotsTxt(site) {
 // LanguageNav saves the choice in the visitor's own browser (localStorage "lang") when they click a
 // language code; nothing is sent anywhere, no cookies. SiteHead loads this file at the very top of
 // the default language's home page only, as a plain blocking script, so the jump happens before
-// that page is drawn. It does nothing when:
+// that page is drawn; on a one-language site SiteHead never loads it, so that site needs no
+// src/pages/lang-redirect.js.ts. It does nothing when:
 // - the visitor came from another page of this site (they chose to go home, e.g. in a new tab),
 // - nothing (or the default language, or an unknown value) is saved, or storage is blocked.
 // While the jump happens the page is hidden, so a slow connection can't flash it; it shows again
