@@ -33,14 +33,15 @@ general-purpose package.
   (`../site-kit/scripts/wordmark.py`); it needs fontTools and uharfbuzz and isn't installed into
   the sites.
 - `site-kit/routes`: `robotsTxt()` and `langRedirect()` for `/robots.txt` and `/lang-redirect.js`
-  (the second only on a site with more than one language).
+  (which sites need the second: `langRedirect()`'s comment).
 - `site-kit/markdown`: `lineBreaks`, a Markdown rule that keeps single line breaks.
 - `site-kit/headers`: `securityHeaders()`, an Astro integration that writes the shared `/*`
   security headers into `dist/_headers` ahead of the site's own rules.
 
 ## Look
 
-The blocks use the site's `--paper`, `--ink`, `--ink-muted` and `--ink-faint`, and these:
+The blocks use the site's `--paper`, `--ink` and `--ink-muted`, `--ink-faint` on a site with
+language links, and these:
 
 | Variable | Sets | Default |
 |---|---|---|
