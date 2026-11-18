@@ -20,6 +20,18 @@ general-purpose package.
 - `site-kit/SiteHeader.astro`: a sticky header; the slot is the site's name or logo, the language
   links sit on the right (a site with one language has none).
 - `site-kit/LanguageNav.astro`: the language links, and remembering the chosen language.
+- `site-kit/Pager.astro`: the page numbers under a list: ← and →, and at most seven numbers and
+  "…" gaps between them; the site gives each page's address (`href`).
+- `site-kit/RandomLink.astro` and `site-kit/RandomPage.astro`: Random. Every Random link is a plain
+  link to `/random/` in its language (shown from two items); that page, the site's
+  `src/pages/[...lang]/random.astro` drawing `RandomPage` with the slugs to pick from, is bare and
+  jumps to one of them, never the page the visitor came from, before anything is drawn.
+- `site-kit/SiteFooter.astro`: the footer: the site's links (About, say), then "© year name".
+- `scripts/wordmark.py <Archivo-VF.ttf> <text> <out>`: draws a text in Archivo Black Expanded as
+  one SVG path in the text colour; with a site's `src/components/Wordmark.astro` as `<out>`, the
+  output is the whole component. Run it from a site's folder beside the kit
+  (`../site-kit/scripts/wordmark.py`); it needs fontTools and uharfbuzz and isn't installed into
+  the sites.
 - `site-kit/routes`: `robotsTxt()` and `langRedirect()` for `/robots.txt` and `/lang-redirect.js`
   (the second only on a site with more than one language).
 - `site-kit/markdown`: `lineBreaks`, a Markdown rule that keeps single line breaks.
@@ -32,7 +44,7 @@ The blocks use the site's `--paper`, `--ink`, `--ink-muted` and `--ink-faint`, a
 
 | Variable | Sets | Default |
 |---|---|---|
-| `--kit-wrap-max` | width of the header row | 72rem |
+| `--kit-wrap-max` | width of the header and footer rows | 72rem |
 | `--kit-wrap-pad` | its side padding | 1rem |
 | `--kit-header-height` | header height (at least) | 3.5rem |
 | `--kit-header-z` | header stacking | 10 |
@@ -51,6 +63,8 @@ The blocks use the site's `--paper`, `--ink`, `--ink-muted` and `--ink-faint`, a
 | `--kit-lang-underline-thickness` | its thickness | 1px |
 | `--kit-lang-hover` | a code's colour on hover | `--ink` |
 | `--kit-skip-size` | skip link's text size | .875rem |
+| `--kit-pager-item-width` | each page number's minimum width | 2.25rem |
+| `--kit-pager-underline-offset` | current page's underline gap | .3em |
 
 Reach variables need a unit (`0px`, not `0`): they are used in `calc()`.
 

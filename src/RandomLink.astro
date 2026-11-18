@@ -1,0 +1,18 @@
+---
+// A link to a random page (RandomPage.astro): a plain link to /random/ in the page's language, the
+// same address on every page. The slot is its text. Nothing is drawn when there are fewer than two
+// items to pick from (count). A class, or other attributes, go onto <a>.
+import type { Locales } from './i18n.js';
+
+interface Props {
+  i18n: Locales<any>;
+  lang: string;
+  count: number; // how many items Random picks from in this language
+  class?: string;
+  [attribute: string]: unknown;
+}
+
+const { i18n, lang, count, class: className, ...attributes } = Astro.props;
+---
+
+{count > 1 && <a class={className} href={i18n.localePath(lang, 'random')} {...attributes}><slot /></a>}

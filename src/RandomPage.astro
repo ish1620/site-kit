@@ -1,0 +1,37 @@
+---
+// The page every Random link goes to (RandomLink.astro): /random/ in each language, the site's
+// src/pages/[...lang]/random.astro. A bare page: its head holds the list of addresses and then
+// random.js, a classic script that jumps to one of them before the body is reached, so with
+// JavaScript nothing is drawn and no stylesheet, font or other script is fetched. Without
+// JavaScript the body shows an unstyled link to the language's home. Kept out of search; the site
+// keeps it out of its sitemap too.
+// The script is imported with ?url: the build copies the file as it is into /_astro/ under a
+// hashed name (the site's assetsInlineLimit: 0 keeps it a file), so it is cached like any build
+// asset and needs no route or header rule of its own.
+import src from './random.js?url';
+import type { Locales } from './i18n.js';
+
+interface Props {
+  i18n: Locales<any>;
+  lang: string;
+  title: string; // the tab's whole title
+  addresses: string[]; // the slugs to pick from, each right under the language's home
+  homeLabel: string; // the text of the link home, shown without JavaScript
+}
+
+const { i18n, lang, title, addresses, homeLabel } = Astro.props;
+const home = i18n.localePath(lang);
+---
+
+<!doctype html>
+<html lang={i18n.LANG_TAG[lang]}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="robots" content="noindex" />
+    <meta name="random-addresses" content={JSON.stringify(addresses)} data-home={home} />
+    <script is:inline src={src}></script>
+  </head>
+  <body><noscript><p><a href={home}>{homeLabel}</a></p></noscript></body>
+</html>

@@ -1,0 +1,43 @@
+---
+// The site footer: the site's links (About, say) in a list, then "© <year> <name>", the year of
+// the build. Each link's tap area is 44px tall, and a link to the page it is on is marked
+// aria-current, with no look of its own. One column as wide as the page's, with the same side
+// padding (--kit-wrap-*, as the header row).
+// Everything else is the site's: the links' colour and underline, type, alignment, the line above,
+// the padding above and below, and the space between the lines. Its rules on these classes take
+// two classes (.kit-footer .kit-footer-copy) where they set a property the rules below set: these
+// load after the site's stylesheet. A class, or other attributes, go onto <footer>.
+
+interface Props {
+  name: string; // the site's name, after the year
+  // The links, in order. lang marks a label in another language than the page's.
+  links: { href: string; label: string; lang?: string }[];
+  class?: string;
+  [attribute: string]: unknown;
+}
+
+const { name, links, class: className, ...attributes } = Astro.props;
+const year = new Date().getFullYear();
+---
+
+<footer class:list={['kit-footer', className]} {...attributes}>
+  <div class="kit-footer-row">
+    {links.length > 0 && <ul class="kit-footer-links">{links.map(({ href, label, lang }) => (
+      <li><a href={href} lang={lang} aria-current={Astro.url.pathname === href ? 'page' : undefined}>{label}</a></li>
+    ))}</ul>}
+    <p class="kit-footer-copy">&copy; {year} {name}</p>
+  </div>
+</footer>
+
+<style is:global>
+  /* One column as wide as the page's, with the same side padding: the header row's width. */
+  .kit-footer-row {
+    box-sizing: border-box; width: 100%; max-width: var(--kit-wrap-max, 72rem);
+    margin-inline: auto; padding-inline: var(--kit-wrap-pad, 1rem);
+  }
+  /* The links sit in the line like words, so the site's text-align places them. */
+  .kit-footer-links { margin: 0; padding: 0; list-style: none; }
+  .kit-footer-links li { display: inline; }
+  .kit-footer-links a { display: inline-flex; align-items: center; min-height: 44px; }
+  .kit-footer-copy { margin: 0; }
+</style>

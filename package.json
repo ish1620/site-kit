@@ -1,6 +1,6 @@
 {
   "name": "site-kit",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Shared Astro building blocks for a few personal sites",
   "type": "module",
@@ -14,7 +14,11 @@
     "./SiteHead.astro": "./src/SiteHead.astro",
     "./SkipLink.astro": "./src/SkipLink.astro",
     "./SiteHeader.astro": "./src/SiteHeader.astro",
-    "./LanguageNav.astro": "./src/LanguageNav.astro"
+    "./LanguageNav.astro": "./src/LanguageNav.astro",
+    "./Pager.astro": "./src/Pager.astro",
+    "./RandomPage.astro": "./src/RandomPage.astro",
+    "./RandomLink.astro": "./src/RandomLink.astro",
+    "./SiteFooter.astro": "./src/SiteFooter.astro"
   },
   "files": ["src"],
   "scripts": {

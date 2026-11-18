@@ -3,6 +3,10 @@ export type LanguageCode = 'en' | 'es' | 'ja' | 'zh';
 export interface KitUI {
   langNav: string;
   skip: string;
+  /** The pager's name, and its arrows'. */
+  pages: string;
+  previousPage: string;
+  nextPage: string;
 }
 
 export interface Language {

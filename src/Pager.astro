@@ -1,0 +1,50 @@
+---
+// The page numbers under a list: arrows to the previous and next page, and a short row of numbers
+// (pagerItems, pager.js) that stays the same length however many pages there are: at most nine
+// items with the arrows. Nothing is drawn when there is one page. The current page is a plain
+// number, underlined and marked aria-current; a gap ("…") is hidden from screen readers. Tap areas
+// are 44px tall.
+// The site gives each page's address (href) and places the row: its margins, alignment and type
+// (a class, or other attributes, go onto <nav>). The width of each item and the current page's
+// underline gap come from the site's CSS variables (--kit-pager-*, listed in README.md).
+import { pagerItems } from './pager.js';
+import type { Locales } from './i18n.js';
+
+interface Props {
+  i18n: Locales<any>;
+  lang: string;
+  page: number; // the current page, from 1
+  count: number; // how many pages
+  href: (page: number) => string; // a page's address
+  class?: string;
+  [attribute: string]: unknown;
+}
+
+const { i18n, lang, page, count, href, class: className, ...attributes } = Astro.props;
+const ui = i18n.KIT_UI[lang];
+---
+
+{count > 1 && <nav class:list={['kit-pager', className]} aria-label={ui.pages} {...attributes}>
+  {page > 1 && <a href={href(page - 1)} rel="prev" aria-label={ui.previousPage}>←</a>}
+  {pagerItems(count, page).map((n) => n === 'gap' ? <span aria-hidden="true">…</span>
+    : n === page ? <span aria-current="page">{n}</span> : <a href={href(n)}>{n}</a>)}
+  {page < count && <a href={href(page + 1)} rel="next" aria-label={ui.nextPage}>→</a>}
+</nav>}
+
+<style is:global>
+  /* One row; it wraps only if the column is narrower than nine items. No gap: the items' own width
+     spaces them, so nine fit a 360px phone. */
+  .kit-pager { display: flex; flex-wrap: wrap; }
+  .kit-pager > * {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 44px; min-width: var(--kit-pager-item-width, 2.25rem);
+    text-decoration-line: none;
+  }
+  .kit-pager [aria-current] {
+    color: var(--ink); text-decoration-line: underline;
+    text-underline-offset: var(--kit-pager-underline-offset, .3em);
+  }
+  @media (hover: hover) {
+    .kit-pager a:hover { color: var(--ink); }
+  }
+</style>
