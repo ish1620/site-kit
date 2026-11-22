@@ -6,6 +6,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Referrer-Policy stays strict-origin-when-cross-origin: Random (src/random.js) reads the page
+// visited before from a same-site referrer, and langRedirect (src/routes.js) tells a visitor who
+// came from this site by it. test/headers.test.js pins the value.
 const BLOCK = `# Written by site-kit's securityHeaders() (src/headers.js) ahead of the site's own rules.
 # Security headers, applied by Cloudflare (Workers static assets read this file).
 /*

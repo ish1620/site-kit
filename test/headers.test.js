@@ -29,6 +29,12 @@ test('writes the block alone when the site has no _headers', async () => {
   assert.match(out, /Strict-Transport-Security: max-age=31536000; includeSubDomains\n$/);
 });
 
+test('sends a same-site referrer whole, which Random and the language memory read', async () => {
+  const out = await runHook(null);
+  const policies = out.split('\n').filter((line) => line.trim().startsWith('Referrer-Policy:'));
+  assert.deepEqual(policies, ['  Referrer-Policy: strict-origin-when-cross-origin']);
+});
+
 test('puts the block first and keeps the site rules unchanged and in order', async () => {
   const siteRules = [
     '# Site caching rules',
