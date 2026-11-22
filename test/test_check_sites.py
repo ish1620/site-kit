@@ -192,7 +192,7 @@ class Compare(Case):
 
 
 class Patterns(unittest.TestCase):
-    """The script's two name patterns, reached as functions."""
+    """The script's two name patterns and the head's tags as printed, reached as functions."""
 
     @classmethod
     def setUpClass(cls):
@@ -200,6 +200,14 @@ class Patterns(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('check_sites', SCRIPT)
         cls.script = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.script)
+
+    def test_head_tag_attributes_print_as_written(self):
+        head = '<head><link rel="preload" crossorigin href="/f.woff2"><script defer src="/a.js"></script><meta content=""></head>'
+        self.assertEqual(self.script.head_tags(head), [
+            '<link rel="preload" crossorigin href="/f.woff2">',
+            '<script defer src="/a.js">',
+            '<meta content="">',
+        ])
 
     def test_whole_asset_names_are_replaced(self):
         keys = {b'Base.Ab12Cd34.css': b'<CSS>', b'x.Ab12_d34.js': b'<JS>', b'f.Ab12-d34.woff2': b'<FONT>'}

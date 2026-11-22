@@ -135,7 +135,9 @@ class HeadTags(HTMLParser):
         if tag == 'head':
             self.in_head = True
         elif self.in_head:
-            self.cur = [f'<{tag}' + ''.join(f' {k}="{v}"' for k, v in attrs) + '>', '']
+            # HTMLParser gives None for an attribute without a value (crossorigin, defer).
+            shown = ''.join(f' {k}' if v is None else f' {k}="{v}"' for k, v in attrs)
+            self.cur = [f'<{tag}{shown}>', '']
             self.tags.append(self.cur)
 
     def handle_data(self, data):
