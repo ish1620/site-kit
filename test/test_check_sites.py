@@ -190,6 +190,298 @@ class Compare(Case):
         self.assertEqual(status, 2, out)
         self.assertLine(out, 'cycle', 'a.Ab12Cd34.js', 'b.Zy98-w76.js')
 
+    # Planned changes: --without and --changed-asset.
+
+    def compare_with(self, before: dict, after: dict, *opts):
+        for name, files in (('before', before), ('after', after)):
+            folder = self.tmp / name
+            if folder.exists():
+                shutil.rmtree(folder)
+            write(folder, files)
+        return self.run_script(SCRIPT, 'compare', *opts, self.tmp / 'before', self.tmp / 'after')
+
+    def with_footer(self, footer: str, page: str = PAGE) -> str:
+        return self.swap(page, '</body>', f'{footer}</body>')
+
+    def test_without_cuts_a_footer_changed_on_every_page(self):
+        about = self.swap(PAGE, '<h1>Home</h1>', '<h1>About</h1>')
+        before = {**BUILD, 'index.html': self.with_footer('<footer>old</footer>'), 'about/index.html': about}
+        after = {
+            **BUILD,
+            'index.html': self.with_footer('<footer class="kit-footer">new</footer>'),
+            'about/index.html': self.with_footer('<footer class="kit-footer">added</footer>', about),
+        }
+        status, out = self.compare(before, after)
+        self.assertEqual(status, 1, out)
+        self.assertLine(out, 'pages whose content (outside the header) changed (2)')
+
+        status, out = self.compare_with(before, after, '--without', 'footer')
+        self.assertEqual(status, 0, out)
+        self.assertIn('without', out.splitlines()[0])
+        self.assertIn('<footer>', out.splitlines()[0])
+        self.assertLine(out, 'HTML pages compared: 2')
+        self.assertLine(out, 'identical')
+
+    def test_without_still_reports_a_changed_header(self):
+        before = {**BUILD, 'index.html': self.with_footer('<footer>old</footer>')}
+        after_page = self.swap(self.with_footer('<footer>new</footer>'), '>site-a<', '>site-b<')
+        after = {**BUILD, 'index.html': after_page}
+        status, out = self.compare_with(before, after, '--without', 'footer')
+        self.assertEqual(status, 1, out)
+        self.assertIn('<footer>', out.splitlines()[0])
+        self.assertLine(out, 'pages whose header or skip link changed (1)')
+        self.assertLine(out, 'header diff, index.html')
+        self.assertNotIn('content (outside the header)', out)
+
+    def test_without_repeatable_cuts_several_tags(self):
+        before = {**BUILD, 'index.html': self.with_footer('<aside>old</aside><footer>old</footer>')}
+        after = {**BUILD, 'index.html': self.with_footer('<aside>new</aside><footer>new</footer>')}
+        status, out = self.compare_with(before, after, '--without', 'footer', '--without', 'aside')
+        self.assertEqual(status, 0, out)
+        self.assertIn('<footer>', out.splitlines()[0])
+        self.assertIn('<aside>', out.splitlines()[0])
+
+    def test_without_cuts_nested_elements_of_the_same_tag(self):
+        before = {**BUILD, 'index.html': self.with_footer('<footer>outer<footer>inner</footer>still outer</footer>')}
+        after = {**BUILD, 'index.html': self.with_footer('<footer>replacement</footer>')}
+        status, out = self.compare_with(before, after, '--without', 'footer')
+        self.assertEqual(status, 0, out)
+        self.assertLine(out, 'identical')
+
+    def test_without_keeps_near_misses(self):
+        for label, old, new in [
+            ('hyphenated tag', '<footer-note>old</footer-note>', '<footer-note>new</footer-note>'),
+            ('word in text', '<p>footer old</p>', '<p>footer new</p>'),
+            ('end tag in script', '<script>const s = "</footer> old";</script>', '<script>const s = "</footer> new";</script>'),
+            ('end tag in comment', '<!-- </footer> old -->', '<!-- </footer> new -->'),
+        ]:
+            with self.subTest(case=label):
+                before = {**BUILD, 'index.html': self.with_footer(old)}
+                after = {**BUILD, 'index.html': self.with_footer(new)}
+                status, out = self.compare_with(before, after, '--without', 'footer')
+                self.assertEqual(status, 1, out)
+                self.assertLine(out, 'pages whose content (outside the header) changed (1)')
+
+        # A </footer> inside a <script> string or comment inside a real <footer> must not close it early.
+        tricky = '<footer>a<script>const s = "</footer>";</script><!-- </footer> -->tail</footer>'
+        before = {**BUILD, 'index.html': self.with_footer(tricky)}
+        after = {**BUILD, 'index.html': self.with_footer('<footer>plain</footer>')}
+        status, out = self.compare_with(before, after, '--without', 'footer')
+        self.assertEqual(status, 0, out)
+        self.assertLine(out, 'identical')
+
+    def test_without_unclosed_element_is_an_error(self):
+        for label, before_html, after_html in [
+            ('unclosed in before', self.with_footer('<footer>open'), PAGE),
+            ('unclosed in after', PAGE, self.with_footer('<footer>open')),
+            ('unclosed outer nested', PAGE, self.with_footer('<footer>outer<footer>inner</footer>')),
+        ]:
+            with self.subTest(case=label):
+                status, out = self.compare_with(
+                    {**BUILD, 'index.html': before_html},
+                    {**BUILD, 'index.html': after_html},
+                    '--without', 'footer',
+                )
+                self.assertEqual(status, 2, out)
+                self.assertLine(out, 'unclosed', '<footer>')
+                self.assertNotIn('identical', out)
+
+    def test_without_reads_textarea_and_title_content_as_text(self):
+        # A "<footer>" typed into a textarea or a title is text on every Python version.
+        page = self.with_footer('<textarea><footer> typed </textarea><footer>old</footer>')
+        page = self.swap(page, '<title>', '<title><footer> ')
+        changed = self.swap(page, '<footer>old</footer>', '<footer>new</footer>')
+        status, out = self.compare_with({**BUILD, 'index.html': page}, {**BUILD, 'index.html': changed}, '--without', 'footer')
+        self.assertEqual(status, 0, out)
+        kept = self.swap(page, '<footer> typed', '<footer> retyped')
+        status, out = self.compare_with({**BUILD, 'index.html': page}, {**BUILD, 'index.html': kept}, '--without', 'footer')
+        self.assertEqual(status, 1, out)
+        # A script typed into a textarea does not hide the textarea's end from what follows it.
+        scripted = self.with_footer('<textarea><script>x</textarea><footer>old</footer>')
+        status, out = self.compare_with({**BUILD, 'index.html': scripted},
+                                        {**BUILD, 'index.html': self.swap(scripted, '>old<', '>new<')}, '--without', 'footer')
+        self.assertEqual(status, 0, out)
+
+    def test_without_title_or_textarea_themselves(self):
+        page = self.with_footer('<textarea>one</textarea>')
+        for tag, old, new in (('title', '<title>', '<title>New '), ('textarea', '<textarea>one', '<textarea>two')):
+            with self.subTest(tag=tag):
+                changed = self.swap(page, old, new)
+                status, out = self.compare_with({**BUILD, 'index.html': page}, {**BUILD, 'index.html': changed})
+                self.assertEqual(status, 1, out)
+                status, out = self.compare_with({**BUILD, 'index.html': page}, {**BUILD, 'index.html': changed}, '--without', tag)
+                self.assertEqual(status, 0, out)
+
+    def test_without_unclosed_element_on_a_page_only_one_build_has(self):
+        for side in ('before', 'after'):
+            with self.subTest(side=side):
+                extra = {**BUILD, 'only.html': self.with_footer('<footer>open')}
+                builds = (extra, BUILD) if side == 'before' else (BUILD, extra)
+                status, out = self.compare_with(*builds, '--without', 'footer')
+                self.assertEqual(status, 2, out)
+                self.assertLine(out, 'unclosed', '<footer>', 'only.html')
+        # A well-formed page only one build has is still reported as an addition.
+        status, out = self.compare_with(BUILD, {**BUILD, 'only.html': self.with_footer('<footer>fine</footer>')}, '--without', 'footer')
+        self.assertEqual(status, 1, out)
+        self.assertLine(out, 'only after')
+
+    def test_changed_asset_shows_a_change_far_into_a_long_rule_and_line_ends(self):
+        long_rule = 'a{' + ';'.join(f'--v{n}:{n}px' for n in range(60)) + ';color:blue}'
+        def build(css_name, css):
+            build = {**BUILD, 'index.html': self.swap(PAGE, 'Base.CIX-Jlc-.css', css_name), f'_astro/{css_name}': css}
+            if css_name != 'Base.CIX-Jlc-.css':
+                del build['_astro/Base.CIX-Jlc-.css']
+            return build
+        before = build('Base.CIX-Jlc-.css', long_rule)
+        status, out = self.compare_with(before, build('Base.Zy98-w76.css', long_rule.replace('color:blue', 'color:green')),
+                                        '--changed-asset', 'Base.css')
+        self.assertEqual(status, 0, out)
+        self.assertGreater(long_rule.index('color:blue'), 200)
+        self.assertLine(out, '-…', 'color:blue}')
+        self.assertLine(out, '+…', 'color:green}')
+        # A rule removed just before the edited one: the edited rule is still paired with itself.
+        status, out = self.compare_with(build('Base.CIX-Jlc-.css', 'p{margin:0}' + long_rule),
+                                        build('Base.Zy98-w76.css', long_rule.replace('color:blue', 'color:green')),
+                                        '--changed-asset', 'Base.css')
+        self.assertEqual(status, 0, out)
+        self.assertLine(out, '-p{margin:0}')
+        self.assertLine(out, '-…', 'color:blue}')
+        self.assertLine(out, '+…', 'color:green}')
+        # A change in line ends alone is said, not shown as an empty diff.
+        two = 'a{color:red}\nb{color:blue}\n'
+        status, out = self.compare_with(build('Base.CIX-Jlc-.css', two), build('Base.Zy98-w76.css', two.replace('\n', '\r\n')),
+                                        '--changed-asset', 'Base.css')
+        self.assertEqual(status, 0, out)
+        self.assertLine(out, 'planned change', 'Base.css', 'only line ends differ')
+
+    def test_changed_asset_alone_passes_and_prints_bounded_diff(self):
+        after = {
+            **BUILD,
+            'index.html': self.swap(PAGE, 'Base.CIX-Jlc-.css', 'Base.Zy98-w76.css'),
+            '_astro/Base.Zy98-w76.css': 'a{color:red}b{color:green}',
+        }
+        del after['_astro/Base.CIX-Jlc-.css']
+        status, out = self.compare(BUILD, after)
+        self.assertEqual(status, 1, out)
+
+        status, out = self.compare_with(BUILD, after, '--changed-asset', 'Base.css')
+        self.assertEqual(status, 0, out)
+        self.assertLine(out, 'planned change', 'Base.css')
+        self.assertLine(out, '-b{color:blue}')
+        self.assertLine(out, '+b{color:green}')
+        self.assertLine(out, 'identical')
+
+        # Repeatable --changed-asset allows two planned assets together.
+        before_two = {**BUILD, '_astro/Extra.Ab12Cd34.css': 'p{margin:0}'}
+        after_two = {**after, '_astro/Extra.Zy98-w76.css': 'p{margin:1rem}'}
+        status, out = self.compare_with(before_two, after_two, '--changed-asset', 'Base.css', '--changed-asset', 'Extra.css')
+        self.assertEqual(status, 0, out)
+        self.assertLine(out, 'planned change', 'Base.css')
+        self.assertLine(out, 'planned change', 'Extra.css')
+
+        # A long diff is bounded in length.
+        many_before = {**BUILD, '_astro/Base.CIX-Jlc-.css': ''.join(f'.c{i}{{color:red}}' for i in range(50))}
+        many_after = {**after, '_astro/Base.Zy98-w76.css': ''.join(f'.c{i}{{color:blue}}' for i in range(50))}
+        status, out = self.compare_with(many_before, many_after, '--changed-asset', 'Base.css')
+        self.assertEqual(status, 0, out)
+        self.assertLine(out, '-.c0{color:red}')
+        self.assertLine(out, 'more lines')
+        self.assertNotIn('.c49{color:blue}', out)
+
+    def test_changed_asset_still_reports_another_changed_asset(self):
+        after = {
+            'index.html': self.swap(
+                self.swap(PAGE, 'Base.CIX-Jlc-.css', 'Base.Zy98-w76.css'),
+                'nav.sfTAO5_a.js', 'nav.Ab12_d34.js',
+            ),
+            '_astro/Base.Zy98-w76.css': 'a{color:red}b{color:green}',
+            '_astro/nav.Ab12_d34.js': 'document.title=`y`;',
+        }
+        status, out = self.compare_with(BUILD, after, '--changed-asset', 'Base.css')
+        self.assertEqual(status, 1, out)
+        self.assertLine(out, 'nav.sfTAO5_a.js')
+        self.assertLine(out, 'planned change', 'Base.css')
+        self.assertLine(out, 'DIFFERENT')
+
+    def test_changed_asset_transitive_dependent_counts_as_same(self):
+        def make(entry, chunk, chunk_body):
+            return {
+                'index.html': self.swap(PAGE, 'nav.sfTAO5_a.js', entry),
+                '_astro/Base.CIX-Jlc-.css': CSS,
+                f'_astro/{entry}': f'import"./{chunk}";go()',
+                f'_astro/{chunk}': chunk_body,
+            }
+        before = make('entry.Ck-SW8bZ.js', 'chunk.Ab12_d34.js', 'export const n=1')
+        after = make('entry.EGAeWXJ0.js', 'chunk.Zy98-w76.js', 'export const n=2')
+        status, out = self.compare_with(before, after, '--changed-asset', 'chunk.js')
+        self.assertEqual(status, 0, out)
+        self.assertLine(out, 'planned change', 'chunk.js')
+        self.assertLine(out, 'identical')
+
+    def test_changed_asset_wrong_name_or_unchanged_is_an_error(self):
+        renamed_same = {
+            'index.html': self.swap(PAGE, 'Base.CIX-Jlc-.css', 'Base.Zy98-w76.css'),
+            '_astro/Base.Zy98-w76.css': CSS,
+            '_astro/nav.sfTAO5_a.js': JS,
+        }
+        for label, before, after, name, fragment in [
+            ('not in either build', BUILD, BUILD, 'Missing.css', 'not in either build'),
+            ('missing in after', {**BUILD, '_astro/Extra.Ab12Cd34.css': CSS}, BUILD, 'Extra.css', 'not in'),
+            ('missing in before', BUILD, {**BUILD, '_astro/Extra.Ab12Cd34.css': CSS}, 'Extra.css', 'not in'),
+            ('identical content', BUILD, BUILD, 'Base.css', 'did not differ'),
+            ('renamed with same content', BUILD, renamed_same, 'Base.css', 'did not differ'),
+            ('ambiguous plain name', {**BUILD, '_astro/Base.Zy98-w76.css': 'a{}'}, BUILD, 'Base.css', 'more than one'),
+        ]:
+            with self.subTest(case=label):
+                status, out = self.compare_with(before, after, '--changed-asset', name)
+                self.assertEqual(status, 2, out)
+                self.assertLine(out, name, fragment)
+
+    def test_without_and_changed_asset_together(self):
+        before = {**BUILD, 'index.html': self.with_footer('<footer>old</footer>')}
+        after_base = {
+            **BUILD,
+            'index.html': self.swap(self.with_footer('<footer>new</footer>'), 'Base.CIX-Jlc-.css', 'Base.Zy98-w76.css'),
+            '_astro/Base.Zy98-w76.css': 'a{color:red}b{color:green}',
+        }
+        del after_base['_astro/Base.CIX-Jlc-.css']
+
+        status, out = self.compare_with(before, after_base, '--without', 'footer', '--changed-asset', 'Base.css')
+        self.assertEqual(status, 0, out)
+        self.assertIn('<footer>', out.splitlines()[0])
+        self.assertLine(out, 'planned change', 'Base.css')
+        self.assertLine(out, 'identical')
+
+        for label, old, new, part in [
+            ('head', '<title>Home</title>', '<title>Away</title>', 'pages whose <head> tags changed (1)'),
+            ('header', '>site-a<', '>site-b<', 'pages whose header or skip link changed (1)'),
+            ('body', '<h1>Home</h1>', '<h1>Away</h1>', 'pages whose content (outside the header) changed (1)'),
+            ('elsewhere', '<title>Home</title>', '<title>Home</title>\n', 'pages that changed elsewhere'),
+        ]:
+            with self.subTest(part=label):
+                after = {**after_base, 'index.html': self.swap(after_base['index.html'], old, new)}
+                status, out = self.compare_with(before, after, '--without', 'footer', '--changed-asset', 'Base.css')
+                self.assertEqual(status, 1, out)
+                self.assertIn('<footer>', out.splitlines()[0])
+                self.assertLine(out, part)
+                self.assertLine(out, 'DIFFERENT')
+
+    def test_option_usage_errors(self):
+        write(self.tmp / 'a', BUILD)
+        write(self.tmp / 'b', BUILD)
+        for args in [
+            ('before', '--without', 'footer'),
+            ('before', '--changed-asset', 'Base.css'),
+            ('compare', '--without', self.tmp / 'a', self.tmp / 'b'),
+            ('compare', '--without', '<footer>', self.tmp / 'a', self.tmp / 'b'),
+            ('compare', '--changed-asset', self.tmp / 'a', self.tmp / 'b'),
+            ('compare', '--changed-asset', '--without', 'footer', self.tmp / 'a', self.tmp / 'b'),
+        ]:
+            with self.subTest(args=args):
+                status, out = self.run_script(SCRIPT, *args)
+                self.assertEqual(status, 2, out)
+                self.assertLine(out, 'compare [--without <tag>]')
+
 
 class Patterns(unittest.TestCase):
     """The script's two name patterns and the head's tags as printed, reached as functions."""
@@ -239,6 +531,26 @@ class Patterns(unittest.TestCase):
                      b'Base.Ab12Cd34.css\n']:
             with self.subTest(name=name):
                 self.assertIsNone(self.script.HASHED.fullmatch(name))
+
+    def test_tag_name_pattern(self):
+        for tag in ['footer', 'FOOTER', 'h1', 'footer-note']:
+            with self.subTest(valid=tag):
+                self.assertIsNotNone(self.script.TAG_NAME.fullmatch(tag))
+        for tag in ['', '<footer>', '1footer', '-footer', 'footer_note', 'footer note', 'footer\n']:
+            with self.subTest(invalid=tag):
+                self.assertIsNone(self.script.TAG_NAME.fullmatch(tag))
+
+    def test_strip_elements_handles_case_attributes_and_line_endings(self):
+        for html, tags, wanted in [
+            ('<p>©</p><FOOTER data-a=">">old</FOOTER  ><p>end</p>', ['footer'], '<p>©</p><p>end</p>'),
+            ('<p>a</p>\r\n<footer>\r\n  x\r\n</footer>\r\n<p>b</p>', ['footer'], '<p>a</p>\r\n\r\n<p>b</p>'),
+            ('<p>a\rb</p><footer>x</footer><p>c</p>', ['footer'], '<p>a\rb</p><p>c</p>'),
+            ('<textarea><footer></textarea><title><footer></title><footer>cut</footer>', ['footer'],
+             '<textarea><footer></textarea><title><footer></title>'),
+            ('<head><meta charset="utf-8"><title>T</title></head>', ['meta'], '<head><title>T</title></head>'),
+        ]:
+            with self.subTest(html=html):
+                self.assertEqual(self.script.strip_elements(html, tags), wanted)
 
 
 class Sites(Case):
@@ -462,6 +774,44 @@ class Sites(Case):
         result = self.check('after', site)
         self.assertError(result, 'site-a: no "before" copy', 'run "before" first')
         self.assertNotIn('building', result[1])
+
+    def test_after_with_without_and_changed_asset(self):
+        before_page = self.swap(PAGE, '</body>', '<footer>old</footer></body>')
+        site = self.site('site-a', page=before_page)
+        write(site / 'out', {'_astro/Base.CIX-Jlc-.css': CSS, '_astro/nav.sfTAO5_a.js': JS})
+        status, out = self.check('before', site)
+        self.assertEqual(status, 0, out)
+
+        after_page = self.swap(
+            self.swap(PAGE, '</body>', '<footer>new</footer></body>'),
+            'Base.CIX-Jlc-.css', 'Base.Zy98-w76.css',
+        )
+        shutil.rmtree(site / 'out')
+        self.link('site-a', page=after_page)
+        write(site / 'out', {'_astro/Base.Zy98-w76.css': 'a{color:red}b{color:green}', '_astro/nav.sfTAO5_a.js': JS})
+
+        status, out = self.check('after', '--without', 'footer', '--changed-asset', 'Base.css', site)
+        self.assertEqual(status, 0, out)
+        lines = out.splitlines()
+        report_start = lines.index('site-a: before → after') + 1
+        self.assertIn('<footer>', lines[report_start])
+        self.assertLine(out, 'planned change', 'Base.css')
+        self.assertLine(out, 'identical')
+
+        # Another change on the page is still reported with status 1.
+        self.link('site-a', page=self.swap(after_page, '<h1>Home</h1>', '<h1>Away</h1>'))
+        status, out = self.check('after', '--without', 'footer', '--changed-asset', 'Base.css', site)
+        self.assertEqual(status, 1, out)
+        self.assertLine(out, 'pages whose content (outside the header) changed (1)')
+
+        # A wrong --changed-asset name on after is a status-2 error.
+        self.assertError(self.check('after', '--changed-asset', 'Missing.css', site), 'Missing.css', 'not in')
+
+        # Works with --release too once the site installs the released kit.
+        self.site('site-a', page=after_page)
+        status, out = self.check('after', '--release', '--without', 'footer', '--changed-asset', 'Base.css', site)
+        self.assertEqual(status, 0, out)
+        self.assertLine(out, 'identical')
 
 
 if __name__ == '__main__':

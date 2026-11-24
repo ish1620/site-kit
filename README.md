@@ -74,8 +74,14 @@ Reach variables need a unit (`0px`, not `0`): they are used in `calc()`.
 `npm test` runs the tests of the JavaScript modules (Node's own test runner) and of
 `scripts/check_sites.py` (Python's `unittest`); neither needs a dependency.
 `scripts/check_sites.py` builds each site before and after a change to a block and compares the
-pages (head tags, header, content, CSS rules and scripts); `scripts/measure-header.js` measures the
-header in a browser. Neither is installed into the sites.
+pages (head tags, header, content, CSS rules and scripts): run `before`, make the change, then run
+`after` (or `after --release` once the sites install the released tag). `compare <build A> <build B>`
+compares any two build folders. When a change is meant to touch every page, `after` and `compare`
+take `--without <tag>` (repeatable, e.g. `--without footer`) to cut those elements from both builds
+before comparing, and `--changed-asset <name>` (repeatable, the plain name without its hash, e.g.
+`--changed-asset Base.css`) to allow that asset to differ while printing its diff.
+`scripts/measure-header.js` measures the header in a browser. Neither script is installed into the
+sites.
 
 ## Security headers
 

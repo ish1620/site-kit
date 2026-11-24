@@ -1,8 +1,11 @@
 """Check that a change to site-kit leaves the sites' built pages as they were.
 
-  python3 -I scripts/check_sites.py before [<site folder>...]             build each site, keep a copy
-  python3 -I scripts/check_sites.py after [--release] [<site folder>...]  build again, compare with the copy
-  python3 -I scripts/check_sites.py compare <build A> <build B>           compare two build folders
+  python3 -I scripts/check_sites.py before [<site folder>...]
+                                          build each site, keep a copy
+  python3 -I scripts/check_sites.py after [--release] [--without <tag>]... [--changed-asset <name>]... [<site folder>...]
+                                          build again, compare with the copy
+  python3 -I scripts/check_sites.py compare [--without <tag>]... [--changed-asset <name>]... <build A> <build B>
+                                          compare two build folders
 
 Sites: with no folders, "before" and "after" take every folder beside the kit whose package.json
 lists site-kit in dependencies or devDependencies. Each site's kit spec is printed.
@@ -25,10 +28,19 @@ The comparison:
   rest of the body, and the doctype and <html> tag, with a diff of the first changed head and
   header; a change outside all four (spacing in the head, say) is listed as elsewhere.
 
+Planned changes ("after" and "compare"):
+- --without <tag> (repeatable): cut every element with that tag from each HTML page of both builds
+  before comparing, so a planned markup change on every page doesn't hide what else changed. The
+  report's first line says what was taken out; an unclosed element is an error.
+- --changed-asset <name> (repeatable): allow the asset with that name (without its hash, such as
+  Base.css) to differ. Pages and assets that differ only through it count as the same, and its own
+  diff is printed. An asset that does not differ or does not exist in both builds is an error.
+
 Exit status: 0 when nothing differs; 1 when something does; 2 when nothing could be compared: a
 usage error, no site, the wrong kit, a failed build, a build folder that is missing or has no HTML
-page, or assets that refer to each other in a cycle. The header's look is checked in a browser
-instead (scripts/measure-header.js).
+page, assets that refer to each other in a cycle, an unclosed --without element, or a
+--changed-asset that doesn't exist in both builds or didn't differ. The header's look is checked
+in a browser instead (scripts/measure-header.js).
 """
 import difflib
 import hashlib
@@ -51,6 +63,14 @@ SNAPSHOTS = Path(tempfile.gettempdir()) / 'site-kit-check'
 NAME = re.compile(rb'[\w.-]+')
 # An asset's name: stem, the 8-character hash (letters, digits, "-" and "_"), extension.
 HASHED = re.compile(rb'(.+)\.[A-Za-z0-9_-]{8}(\.[A-Za-z0-9]+)')
+# An HTML tag name accepted by --without: ASCII letter, then letters, digits or hyphens.
+TAG_NAME = re.compile(r'[A-Za-z][A-Za-z0-9-]*')
+VOID_ELEMENTS = frozenset({
+    'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+    'link', 'meta', 'source', 'track', 'wbr',
+})
+# Elements whose content is text even where it looks like a tag.
+TEXT_CONTENT_ELEMENTS = ('script', 'style', 'textarea', 'title')
 
 
 class CheckError(Exception):
@@ -62,7 +82,7 @@ def keyed(data: bytes, keys: dict) -> bytes:
     return NAME.sub(lambda m: keys.get(m.group(), m.group()), data)
 
 
-def asset_keys(root: Path):
+def asset_keys(root: Path, planned=()):
     """The files in a build's _astro/ by name, and each one's key, worked out from the leaves up."""
     paths = {}
     for f in sorted((root / '_astro').rglob('*')):
@@ -70,6 +90,7 @@ def asset_keys(root: Path):
             if f.name.encode() in paths:
                 raise CheckError(f'two assets named {f.name} in {root}')
             paths[f.name.encode()] = f
+    planned = set(planned)
     keys, chain = {}, []
 
     def key(name):
@@ -84,7 +105,11 @@ def asset_keys(root: Path):
             chain.pop()
             hashed = HASHED.fullmatch(name)
             plain = hashed.group(1) + hashed.group(2) if hashed else name
-            keys[name] = plain + b'#' + hashlib.sha256(keyed(data, keys)).hexdigest()[:16].encode()
+            if plain in planned:
+                # Shared key so pages and assets that only follow this change still count as the same.
+                keys[name] = plain + b'#changed'
+            else:
+                keys[name] = plain + b'#' + hashlib.sha256(keyed(data, keys)).hexdigest()[:16].encode()
 
     for name in paths:
         key(name)
@@ -95,10 +120,14 @@ def plain_name(key: bytes) -> bytes:
     return key.rsplit(b'#', 1)[0]
 
 
+def css_rules(text: str) -> list:
+    return [r.strip() for r in re.split(r'(?<=\})', text) if r.strip()]
+
+
 class Build:
     """A build folder: its assets' keys and its other files. Missing or without a page is an error."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, planned=()):
         if not root.is_dir():
             raise CheckError(f'no build folder: {root}')
         self.root = root
@@ -106,14 +135,16 @@ class Build:
         self.files = {f for f in files if f.parts[0] != '_astro'}
         if not any(f.suffix == '.html' for f in self.files):
             raise CheckError(f'no HTML page in {root}')
-        self.paths, self.keys = asset_keys(root)
+        self.paths, self.keys = asset_keys(root, planned)
 
     def read(self, file: Path) -> bytes:
         return keyed((self.root / file).read_bytes(), self.keys)
 
+    def read_asset(self, name: bytes) -> bytes:
+        return keyed(self.paths[name].read_bytes(), self.keys)
+
     def rules(self, name: bytes) -> list:
-        text = keyed(self.paths[name].read_bytes(), self.keys).decode('utf-8', 'replace')
-        return [r.strip() for r in re.split(r'(?<=\})', text) if r.strip()]
+        return css_rules(self.read_asset(name).decode('utf-8', 'replace'))
 
     def unmatched(self, other: 'Build') -> list:
         """The names of the assets whose keys the other build lacks."""
@@ -179,9 +210,173 @@ def show_diff(title, before: list, after: list, limit=40):
         print(f'    … and {len(lines) - limit} more lines')
 
 
-def compare(before: Path, after: Path) -> bool:
+def strip_elements(html: str, tags, where: str = '') -> str:
+    """Cut every element whose tag is in tags from an HTML document; raise CheckError if unclosed."""
+    drop = {t.lower() for t in tags}
+    if not drop:
+        return html
+    # HTMLParser counts lines on '\n' alone, so build the offset table the same way.
+    starts = [0]
+    pos = html.find('\n')
+    while pos != -1:
+        starts.append(pos + 1)
+        pos = html.find('\n', pos + 1)
+
+    class Stripper(HTMLParser):
+        # The parser reads what is inside these as text up to their closing tag. Older Pythons
+        # list only script and style here; a "<footer>" typed into a textarea or a title is
+        # text on every version this way.
+        CDATA_CONTENT_ELEMENTS = TEXT_CONTENT_ELEMENTS
+
+        def __init__(self):
+            super().__init__(convert_charrefs=False)
+            self.cuts, self.outer, self.depth, self.start = [], None, 0, 0
+
+        def index(self):
+            line, col = self.getpos()
+            return starts[line - 1] + col
+
+        def handle_starttag(self, tag, attrs):
+            if self.outer is None:
+                if tag in drop:
+                    idx = self.index()
+                    if tag in VOID_ELEMENTS:
+                        self.cuts.append((idx, idx + len(self.get_starttag_text())))
+                    else:
+                        self.outer, self.depth, self.start = tag, 1, idx
+            elif tag == self.outer:
+                self.depth += 1
+
+        def handle_startendtag(self, tag, attrs):
+            if self.outer is None and tag in drop:
+                idx = self.index()
+                self.cuts.append((idx, idx + len(self.get_starttag_text())))
+
+        def handle_endtag(self, tag):
+            if self.outer is not None and tag == self.outer:
+                self.depth -= 1
+                if self.depth == 0:
+                    end = html.find('>', self.index() + 2) + 1
+                    self.cuts.append((self.start, end))
+                    self.outer = None
+
+    parser = Stripper()
+    parser.feed(html)
+    parser.close()
+    if parser.outer is not None:
+        loc = f' in {where}' if where else ''
+        raise CheckError(f'unclosed <{parser.outer}> element{loc}')
+    if not parser.cuts:
+        return html
+    parts, cur = [], 0
+    for start, end in parser.cuts:
+        parts.append(html[cur:start])
+        cur = end
+    parts.append(html[cur:])
+    return ''.join(parts)
+
+
+def resolve_planned(b: Build, a: Build, planned: list) -> list:
+    """Check that each planned asset exists uniquely in both builds and differs; return its keyed pair."""
+    pairs = []
+    for plain in planned:
+        label = plain.decode()
+        in_b = [n for n, k in sorted(b.keys.items()) if plain_name(k) == plain]
+        in_a = [n for n, k in sorted(a.keys.items()) if plain_name(k) == plain]
+        if not in_b and not in_a:
+            raise CheckError(f'changed asset {label} is not in either build')
+        if not in_b:
+            raise CheckError(f'changed asset {label} is not in {b.root}')
+        if not in_a:
+            raise CheckError(f'changed asset {label} is not in {a.root}')
+        if len(in_b) > 1:
+            raise CheckError(f'more than one asset named {label} in {b.root}')
+        if len(in_a) > 1:
+            raise CheckError(f'more than one asset named {label} in {a.root}')
+        data_b, data_a = b.read_asset(in_b[0]), a.read_asset(in_a[0])
+        if data_b == data_a:
+            raise CheckError(f'changed asset {label} did not differ')
+        pairs.append((plain, data_b, data_a))
+    return pairs
+
+
+def show_changed_lines(title, before: list, after: list, limit=40, width=200):
+    """Like show_diff, for lines that can be very long (a stylesheet's rules): a changed line is
+    shown from a little before its first difference, so the change is in what is printed."""
+    out = []
+    for op, b0, b1, a0, a1 in difflib.SequenceMatcher(a=before, b=after, autojunk=False).get_opcodes():
+        if op == 'equal':
+            continue
+        olds, news = before[b0:b1], after[a0:a1]
+        # Pair each old line with the new line most like it (a rule edited in place), whatever
+        # their order in the hunk; a line with no counterpart is a whole line added or removed.
+        left = list(range(len(news)))
+        for old in olds:
+            best = max(left, key=lambda k: difflib.SequenceMatcher(a=old, b=news[k], autojunk=False).ratio(), default=None)
+            if best is not None and difflib.SequenceMatcher(a=old, b=news[best], autojunk=False).ratio() >= 0.6:
+                left.remove(best)
+                new = news[best]
+                same = next((i for i, (x, y) in enumerate(zip(old, new)) if x != y), min(len(old), len(new)))
+                start = max(0, same - 60)
+                lead = '…' if start else ''
+                out += [f'-{lead}{old[start:start + width]}', f'+{lead}{new[start:start + width]}']
+            else:
+                out.append(f'-{old[:width]}')
+        out += [f'+{news[k][:width]}' for k in left]
+    print(f'  {title}:')
+    for line in out[:limit]:
+        print(f'    {line}')
+    if len(out) > limit:
+        print(f'    … and {len(out) - limit} more lines')
+
+
+def show_planned_diff(plain: bytes, data_b: bytes, data_a: bytes):
+    """Print a bounded diff for one planned asset change."""
+    label = plain.decode()
+    try:
+        text_b, text_a = data_b.decode('utf-8'), data_a.decode('utf-8')
+    except UnicodeDecodeError:
+        print(f'  planned change, {label}: binary ({len(data_b)} → {len(data_a)} bytes)')
+        return
+    if '\x00' in text_b or '\x00' in text_a:
+        print(f'  planned change, {label}: binary ({len(data_b)} → {len(data_a)} bytes)')
+        return
+    if plain.endswith(b'.css'):
+        rules_b, rules_a = css_rules(text_b), css_rules(text_a)
+        if rules_b != rules_a:
+            show_changed_lines(f'planned change, CSS rules, {label}', rules_b, rules_a)
+            return
+    lines_b, lines_a = text_b.splitlines(), text_a.splitlines()
+    if lines_b == lines_a:
+        # The bytes differ and no line does: line ends, or the last line's.
+        print(f'  planned change, {label}: only line ends differ ({len(data_b)} → {len(data_a)} bytes)')
+        return
+    show_changed_lines(f'planned change, {label}', lines_b, lines_a)
+
+
+def compare(before: Path, after: Path, without=(), changed_assets=()) -> bool:
     """Print what differs between two build folders; return True if nothing does."""
-    b, a = Build(before), Build(after)
+    planned = [name.encode() for name in changed_assets]
+    b, a = Build(before, planned), Build(after, planned)
+    planned_pairs = resolve_planned(b, a, planned)
+
+    common = b.files & a.files
+    pages = sorted(f for f in common if f.suffix == '.html')
+    # A page only one build has is reported as before, but a named element left open in it is
+    # still the error it is anywhere else.
+    for build_, root in ((b, before), (a, after)):
+        other = a if build_ is b else b
+        for f in sorted(build_.files - other.files) if without else ():
+            if f.suffix == '.html':
+                strip_elements(build_.read(f).decode('utf-8', 'surrogateescape'), without, str(root / f))
+    stripped = {}
+    if without:
+        for f in pages:
+            page_b = strip_elements(b.read(f).decode('utf-8', 'surrogateescape'), without, str(before / f))
+            page_a = strip_elements(a.read(f).decode('utf-8', 'surrogateescape'), without, str(after / f))
+            stripped[f] = (page_b.encode('utf-8', 'surrogateescape'), page_a.encode('utf-8', 'surrogateescape'))
+        print(f'  without: {", ".join(f"<{t}>" for t in without)}')
+
     same = True
 
     def report(label, items, limit=10):
@@ -201,7 +396,6 @@ def compare(before: Path, after: Path) -> bool:
         # name, which the assets' own comparison reports; this spares keying every large file.
         return raw_b != raw_a and keyed(raw_b, b.keys) != keyed(raw_a, a.keys)
 
-    common = b.files & a.files
     report('only before', b.files - a.files)
     report('only after', a.files - b.files)
     report('other files changed', [f for f in common if f.suffix != '.html' and differs(f)])
@@ -215,11 +409,12 @@ def compare(before: Path, after: Path) -> bool:
         if plain.endswith(b'.css') and count_b[plain] == 1 and count_a[plain] == 1:
             counterpart = next(n for n in new if plain_name(a.keys[n]) == plain)
             show_diff(f'CSS rules, {plain.decode()}', b.rules(name), a.rules(counterpart))
+    for plain, data_b, data_a in planned_pairs:
+        show_planned_diff(plain, data_b, data_a)
 
-    pages = sorted(f for f in common if f.suffix == '.html')
     changed, elsewhere, diffs = {part: [] for part in PARTS}, [], {}
     for f in pages:
-        page_b, page_a = b.read(f), a.read(f)
+        page_b, page_a = stripped[f] if without else (b.read(f), a.read(f))
         if page_b == page_a:
             continue
         parts_b, parts_a = page_parts(page_b), page_parts(page_a)
@@ -315,14 +510,45 @@ def build(site: Path) -> Path:
 
 def run(argv) -> int:
     command, args = (argv[0], argv[1:]) if argv else (None, [])
-    release = command == 'after' and '--release' in args
-    folders = [a for a in args if not (release and a == '--release')]
-    usage = command not in ('before', 'after', 'compare') or any(f.startswith('-') for f in folders)
+    release, without, changed_assets, folders = False, [], [], []
+    usage = command not in ('before', 'after', 'compare')
+    i = 0
+    while not usage and i < len(args):
+        arg = args[i]
+        if arg == '--release' and command == 'after':
+            release = True
+        elif (arg == '--without' or arg.startswith('--without=')) and command in ('after', 'compare'):
+            if arg == '--without':
+                i += 1
+                val = args[i] if i < len(args) else ''
+            else:
+                val = arg.split('=', 1)[1]
+            if not TAG_NAME.fullmatch(val):
+                usage = True
+            else:
+                without.append(val.lower())
+        elif (arg == '--changed-asset' or arg.startswith('--changed-asset=')) and command in ('after', 'compare'):
+            if arg == '--changed-asset':
+                i += 1
+                val = args[i] if i < len(args) else ''
+            else:
+                val = arg.split('=', 1)[1]
+            if not val or val.startswith('-'):
+                usage = True
+            else:
+                changed_assets.append(val)
+        elif arg.startswith('-'):
+            usage = True
+        else:
+            folders.append(arg)
+        i += 1
+    without = list(dict.fromkeys(without))
+    changed_assets = list(dict.fromkeys(changed_assets))
     if usage or (command == 'compare' and len(folders) != 2):
         print(__doc__)
         return 2
     if command == 'compare':
-        return 0 if compare(Path(folders[0]), Path(folders[1])) else 1
+        return 0 if compare(Path(folders[0]), Path(folders[1]), without=without, changed_assets=changed_assets) else 1
 
     sites, problems = find_sites(folders), []
     for site, spec in sites:
@@ -342,7 +568,7 @@ def run(argv) -> int:
             print(f'  kept a copy in {snapshot}')
         else:
             print(f'{site.name}: before → after')
-            ok = compare(snapshot, dist) and ok
+            ok = compare(snapshot, dist, without=without, changed_assets=changed_assets) and ok
     return 0 if ok else 1
 
 
