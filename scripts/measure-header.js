@@ -43,8 +43,9 @@
     const summary = menu.querySelector('summary');
     const code = summary.querySelector('.kit-langmenu-code');
     // The code as the page shows it, closed (open, its colour changes), then the open list.
-    const closed = 'code ' + code.textContent + ' ' + box(summary) + ' text ' + textBox(code) + ' | ' + style(summary, ['color']);
     const wasOpen = menu.open;
+    menu.open = false;
+    const closed = 'code ' + code.textContent + ' ' + box(summary) + ' text ' + textBox(code) + ' | ' + style(summary, ['color']);
     menu.open = true;
     const list = menu.querySelector('.kit-langmenu-list');
     languages = [
