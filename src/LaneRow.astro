@@ -5,6 +5,10 @@
 // - The site passes the lanes (`lanes`: href, label, current), the picker's label for this page
 //   (`picker`: the current lane's, or the site's own word) and the row's name for screen readers
 //   (`label`, on both lists). The current lane is a link marked aria-current="page", underlined.
+// - `lang`: the language the lane labels are written in, when it isn't the page's (a site that
+//   keeps its lane names in English on every page). It goes on each lane link and on the picker's
+//   label, never on the lists, whose name for screen readers is in the page's language. Without
+//   it, no attribute.
 // - The site's own items (a menu of its own, say) go in the default slot: rendered once and placed
 //   after the lanes in both the row and the picker. The rules here use direct-child selectors, so
 //   they never reach inside those items; the typography sits on the row, so the picker's summary
@@ -28,27 +32,29 @@ interface Props {
   lanes: Lane[];
   // The picker's label on this page.
   picker: string;
-  // What screen readers call the lists.
+  // What screen readers call the lists, in the page's language.
   label: string;
+  // The language of the lane labels and the picker's label, when it isn't the page's.
+  lang?: string;
   class?: string;
   [attribute: string]: unknown;
 }
 
-const { lanes, picker, label, class: className, ...attributes } = Astro.props;
+const { lanes, picker, label, lang, class: className, ...attributes } = Astro.props;
 const items = Astro.slots.has('default') ? await Astro.slots.render('default') : '';
 ---
 
 <div class:list={['kit-lane-row', className]} {...attributes}><div class="kit-lane-wrap">
   <nav class="kit-lanes" aria-label={label}>
-    {lanes.map((lane) => <a href={lane.href} aria-current={lane.current ? 'page' : undefined}>{lane.label}</a>)}
+    {lanes.map((lane) => <a href={lane.href} aria-current={lane.current ? 'page' : undefined} lang={lang}>{lane.label}</a>)}
     <Fragment set:html={items} />
   </nav>
   <details class="kit-lane-picker" data-kit-menu>
-    <summary><span>{picker}</span>
+    <summary><span lang={lang}>{picker}</span>
       <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5 6 8l3.5-3.5" /></svg>
     </summary>
     <nav aria-label={label}>
-      {lanes.map((lane) => <a href={lane.href} aria-current={lane.current ? 'page' : undefined}>{lane.label}</a>)}
+      {lanes.map((lane) => <a href={lane.href} aria-current={lane.current ? 'page' : undefined} lang={lang}>{lane.label}</a>)}
       <Fragment set:html={items} />
     </nav>
   </details>

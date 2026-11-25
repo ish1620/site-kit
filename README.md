@@ -26,7 +26,8 @@ general-purpose package.
   current code, and open, every language under its own name; remembers the choice like the codes.
 - `site-kit/LaneRow.astro`: the lanes under the header: a row of links while it fits, a picker
   showing the page's lane when it would overflow; the site passes the lanes, the picker's label and
-  the row's name, and its own items (a menu) in the slot. Until its script measures the row, the
+  the row's name, its own items (a menu) in the slot, and `lang` when the labels are in another
+  language than the page (on the labels only; the row's name stays in the page's language). Until its script measures the row, the
   site's CSS guesses: it shows the picker below the narrowest window its row fits, with
   `@media (width < …) { .kit-lane-row:not([data-lanes]) .kit-lanes { height: 0; visibility: hidden;
   overflow: hidden } .kit-lane-row:not([data-lanes]) .kit-lane-picker { display: block } }`.
