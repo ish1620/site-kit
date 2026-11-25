@@ -108,7 +108,7 @@ language links or the drop-down, and these:
 | `--kit-pager-item-width` | each page number's minimum width | 2.25rem |
 | `--kit-pager-underline-offset` | current page's underline gap | .3em |
 
-Reach variables need a unit (`0px`, not `0`): they are used in `calc()`.
+Reach variables and `--kit-langmenu-lift` need a unit (`0px`, not `0`): they are used in `calc()`.
 
 ## Checking the sites after a change
 
