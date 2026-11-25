@@ -18,8 +18,21 @@ general-purpose package.
   canonical, hreflang, link previews with an optional description of the image, JSON-LD).
 - `site-kit/SkipLink.astro`: "Skip to content", shown on keyboard focus.
 - `site-kit/SiteHeader.astro`: a sticky header; the slot is the site's name or logo, the language
-  links sit on the right (a site with one language has none).
-- `site-kit/LanguageNav.astro`: the language links, and remembering the chosen language.
+  links sit on the right (a site with one language has none). A site that fills its `languages`
+  slot (`<LanguageMenu slot="languages" .../>`) gets that there instead.
+- `site-kit/LanguageNav.astro`: the language links, a row of codes, and remembering the chosen
+  language.
+- `site-kit/LanguageMenu.astro`: the languages as a drop-down (the browser's own `<details>`): the
+  current code, and open, every language under its own name; remembers the choice like the codes.
+- `site-kit/LaneRow.astro`: the lanes under the header: a row of links while it fits, a picker
+  showing the page's lane when it would overflow; the site passes the lanes, the picker's label and
+  the row's name, and its own items (a menu) in the slot. Until its script measures the row, the
+  site's CSS guesses: it shows the picker below the narrowest window its row fits, with
+  `@media (width < …) { .kit-lane-row:not([data-lanes]) .kit-lanes { height: 0; visibility: hidden;
+  overflow: hidden } .kit-lane-row:not([data-lanes]) .kit-lane-picker { display: block } }`.
+- Menus: the drop-down, the lane picker and any `<details data-kit-menu>` of the site's close on a
+  press outside them and on Escape (the innermost first, the focus back on its summary), and when a
+  link in them is chosen.
 - `site-kit/Pager.astro`: the page numbers under a list: ← and →, and at most seven numbers and
   "…" gaps between them; the site gives each page's address (`href`).
 - `site-kit/RandomLink.astro` and `site-kit/RandomPage.astro`: Random. Every Random link is a plain
@@ -41,7 +54,7 @@ general-purpose package.
 ## Look
 
 The blocks use the site's `--paper`, `--ink` and `--ink-muted`, `--ink-faint` on a site with
-language links, and these:
+language links or the drop-down, and these:
 
 | Variable | Sets | Default |
 |---|---|---|
@@ -63,6 +76,33 @@ language links, and these:
 | `--kit-lang-underline-offset` | current code's underline gap | 4px |
 | `--kit-lang-underline-thickness` | its thickness | 1px |
 | `--kit-lang-hover` | a code's colour on hover | `--ink` |
+| `--kit-langmenu-font` | drop-down's font | inherit |
+| `--kit-langmenu-size` | its size | .8125rem |
+| `--kit-langmenu-tracking` | its letter spacing | .02em |
+| `--kit-langmenu-pad` | the code's side padding | 0 |
+| `--kit-langmenu-reach` | the code's tap area past the edge | 0px |
+| `--kit-langmenu-chevron-gap` | space between the code and its chevron | .35rem |
+| `--kit-langmenu-lift` | how far the list rises into the code's tap area | 0px |
+| `--kit-langmenu-width` | the list's minimum width | 8.5rem |
+| `--kit-langmenu-list-pad` | the list's padding above and below | .25rem |
+| `--kit-langmenu-item-pad` | each name's side padding | 1rem |
+| `--kit-langmenu-bg` | the list's background | `--paper` |
+| `--kit-langmenu-border` | the list's border | 1px solid `--ink-faint` |
+| `--kit-langmenu-underline-offset` | current name's underline gap | 4px |
+| `--kit-langmenu-underline-thickness` | its thickness | 1px |
+| `--kit-langmenu-hover` | the code's and a name's colour on hover | `--ink` |
+| `--kit-lane-font` | lane row's font (the picker's too) | inherit |
+| `--kit-lane-size` | its size | .8125rem |
+| `--kit-lane-leading` | its line height | inherit |
+| `--kit-lane-tracking` | its letter spacing | normal |
+| `--kit-lane-case` | its text-transform | none |
+| `--kit-lane-gap` | space between lanes | 1.5rem |
+| `--kit-lane-align` | the row's, the picker's label's and its list's place: `start` or `center` | start |
+| `--kit-lane-border` | line under the row | 0 |
+| `--kit-lane-underline-offset` | current lane's underline gap | .4em |
+| `--kit-lane-underline-thickness` | its thickness (`auto`: the font's own) | 1px |
+| `--kit-lane-hover` | a lane's colour on hover | `--ink` |
+| `--kit-lane-picker-end` | space under the picker's open list | .5rem |
 | `--kit-skip-size` | skip link's text size | .875rem |
 | `--kit-pager-item-width` | each page number's minimum width | 2.25rem |
 | `--kit-pager-underline-offset` | current page's underline gap | .3em |
@@ -76,11 +116,16 @@ Reach variables need a unit (`0px`, not `0`): they are used in `calc()`.
 `scripts/check_sites.py` builds each site before and after a change to a block and compares the
 pages (head tags, header, content, CSS rules and scripts): run `before`, make the change, then run
 `after` (or `after --release` once the sites install the released tag). `compare <build A> <build B>`
-compares any two build folders. When a change is meant to touch every page, `after` and `compare`
-take `--without <tag>` (repeatable, e.g. `--without footer`) to cut those elements from both builds
-before comparing, and `--changed-asset <name>` (repeatable, the plain name without its hash, e.g.
-`--changed-asset Base.css`) to allow that asset to differ while printing its diff.
-`scripts/measure-header.js` measures the header in a browser. Neither script is installed into the
+compares any two build folders. A planned change would hide what else changed, so `after` and
+`compare` take it out of the comparison, each option repeatable and an error when it doesn't find
+exactly what it names: `--without <tag>` or `--without <tag>.<class>` (cut those elements from both
+builds, e.g. `--without footer`), `--changed-asset <name>` (the plain name without its hash, e.g.
+`--changed-asset Base.css`: that asset may differ, its diff printed), `--renamed-asset <old> <new>`
+(an asset that changed its name), `--new-asset <name>` (one the after build adds, its content
+printed) and `--replace <old> <new>` (a wording changed on the before build's pages). The script's
+`--help` says the details.
+`scripts/measure-header.js` measures the header, its language links or drop-down, and what sits
+between it and the page's content (a lane row) in a browser. Neither script is installed into the
 sites.
 
 ## Security headers
