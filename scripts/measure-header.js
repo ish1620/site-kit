@@ -42,12 +42,14 @@
   } else if (menu) {
     const summary = menu.querySelector('summary');
     const code = summary.querySelector('.kit-langmenu-code');
+    // The code as the page shows it, closed (open, its colour changes), then the open list.
+    const closed = 'code ' + code.textContent + ' ' + box(summary) + ' text ' + textBox(code) + ' | ' + style(summary, ['color']);
     const wasOpen = menu.open;
     menu.open = true;
     const list = menu.querySelector('.kit-langmenu-list');
     languages = [
       'langmenu ' + box(menu) + ' | ' + style(menu, ['font-family', 'font-size', 'letter-spacing']),
-      'code ' + code.textContent + ' ' + box(summary) + ' text ' + textBox(code) + ' | ' + style(summary, ['color']),
+      closed,
       'list ' + box(list) + ' | ' + style(list, ['background-color', 'border-top-width', 'border-top-color']),
       ...[...list.children].map((c) => c.textContent + ' ' + box(c) + ' text ' + textBox(c) + ' | '
         + style(c, ['color', 'font-family', 'text-decoration-line']) + underline(c)),
