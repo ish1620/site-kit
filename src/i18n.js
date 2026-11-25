@@ -7,7 +7,8 @@
 //   Japanese or Traditional forms of the same characters. The short code (zh) stays for addresses,
 //   folders and the remembered choice.
 // - og: its name in link previews (Open Graph).
-// - name: the language in itself ("Español"): the language links' tooltip.
+// - name: the language in itself ("Español"): the language links' tooltip and the drop-down's
+//   list (LanguageMenu). Chinese is 中文: the tag already says Simplified.
 // - nameEn: in English ("Spanish"): the "originally written in" line, English on every page.
 // - ui: the kit's own interface text in that language: what screen readers call the language
 //   links and the pager, its arrows, and the skip link.
@@ -16,7 +17,7 @@ export const LANGUAGES = {
   en: { tag: 'en', og: 'en_US', name: 'English', nameEn: 'English', ui: { langNav: 'Language', skip: 'Skip to content', pages: 'Pages', previousPage: 'Previous page', nextPage: 'Next page' } },
   es: { tag: 'es', og: 'es_ES', name: 'Español', nameEn: 'Spanish', ui: { langNav: 'Idioma', skip: 'Saltar al contenido', pages: 'Páginas', previousPage: 'Página anterior', nextPage: 'Página siguiente' } },
   ja: { tag: 'ja', og: 'ja_JP', name: '日本語', nameEn: 'Japanese', ui: { langNav: '言語', skip: '本文へ移動', pages: 'ページ', previousPage: '前のページ', nextPage: '次のページ' } },
-  zh: { tag: 'zh-Hans', og: 'zh_CN', name: '简体中文', nameEn: 'Chinese', ui: { langNav: '语言', skip: '跳到正文', pages: '分页', previousPage: '上一页', nextPage: '下一页' } },
+  zh: { tag: 'zh-Hans', og: 'zh_CN', name: '中文', nameEn: 'Chinese', ui: { langNav: '语言', skip: '跳到正文', pages: '分页', previousPage: '上一页', nextPage: '下一页' } },
 };
 
 export function defineLocales({ locales, defaultLocale }) {

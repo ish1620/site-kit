@@ -29,3 +29,7 @@ test('another default language has no prefix of its own', () => {
   ]);
   assert.deepEqual(ja.alternatesOf('about'), { ja: '/about/', en: '/en/about/' });
 });
+
+test('each language is named in itself, Chinese as 中文', () => {
+  assert.deepEqual(i18n.LANG_NAME, { en: 'English', es: 'Español', ja: '日本語', zh: '中文' });
+});
