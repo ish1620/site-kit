@@ -6,8 +6,9 @@
 // The visible code is the accessible name, so voice control can follow what it sees ("click es");
 // the language's own name ("Español") is the tooltip, and lang="" has each code read in its own
 // language. Tap areas are 44px tall.
-// A plain click on a code is remembered (the script below), so the bare home page opens in that
+// A plain click on a code is remembered (remember-lang.js), so the bare home page opens in that
 // language next time (langRedirect in routes.js).
+// A site can draw LanguageMenu, a drop-down, instead (SiteHeader's languages slot).
 // SiteHeader leaves this component out on a one-language site: drawn there, it would show the one
 // code and add its script to the page.
 // The look comes from the site's CSS variables (--kit-lang-*, listed in README.md).
@@ -36,18 +37,8 @@ const { LOCALES, LANG_TAG, LANG_NAME, KIT_UI } = i18n;
 </nav>
 
 <script>
-  // Remember the language a visitor switches to: one word in the visitor's own browser, never sent
-  // anywhere; no cookies. Only a plain click that switches this page counts; opening a language in
-  // a new tab (cmd/ctrl/shift-click, middle-click) doesn't.
-  // data-lang holds the short code ("zh"), which /lang-redirect.js looks up; hreflang holds the
-  // full tag ("zh-Hans"). Astro bundles this into a file when the site sets
-  // vite.build.assetsInlineLimit: 0 (README.md), so a strict Content Security Policy allows it.
-  document.addEventListener('click', (event) => {
-    if (event.button || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
-    const link = event.target instanceof Element ? event.target.closest('.kit-langs a[data-lang]') : null;
-    const lang = link?.getAttribute('data-lang');
-    if (lang) try { localStorage.setItem('lang', lang); } catch { /* storage blocked: nothing saved */ }
-  });
+  // Remembers a plain click on a code (remember-lang.js, shared with LanguageMenu).
+  import './remember-lang.js';
 </script>
 
 <style is:global>
