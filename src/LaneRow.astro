@@ -1,0 +1,119 @@
+---
+// The lanes under the header: a row of links to a site's sections while it fits on one line, and
+// a picker when it would overflow (the browser's own <details>, showing the page's lane and
+// opening the full list). Not sticky: it leaves with the page as it scrolls.
+// - The site passes the lanes (`lanes`: href, label, current), the picker's label for this page
+//   (`picker`: the current lane's, or the site's own word) and the row's name for screen readers
+//   (`label`, on both lists). The current lane is a link marked aria-current="page", underlined.
+// - The site's own items (a menu of its own, say) go in the default slot: rendered once and placed
+//   after the lanes in both the row and the picker. The rules here use direct-child selectors, so
+//   they never reach inside those items; the typography sits on the row, so the picker's summary
+//   and the items inherit it.
+// - The script below measures the row and sets data-lanes="row" or "picker" on it; the hidden row
+//   keeps its width (no height, clipped, not shown), so it can still be measured. Until the script
+//   runs, and without scripts, the row shows: a site guesses the narrowest window its row fits and
+//   shows the picker below it, from its own CSS on `.kit-lane-row:not([data-lanes])` (README.md).
+// - The picker is a menu (data-kit-menu): menus.js closes it on a press outside and on Escape, and
+//   a menu of the site's inside it (with data-kit-menu too) closes first.
+// The look comes from the site's CSS variables (--kit-lane-*, listed in README.md). Other
+// attributes (a class, an id) go onto the outer element.
+
+interface Lane {
+  href: string;
+  label: string;
+  current?: boolean;
+}
+
+interface Props {
+  lanes: Lane[];
+  // The picker's label on this page.
+  picker: string;
+  // What screen readers call the lists.
+  label: string;
+  class?: string;
+  [attribute: string]: unknown;
+}
+
+const { lanes, picker, label, class: className, ...attributes } = Astro.props;
+const items = Astro.slots.has('default') ? await Astro.slots.render('default') : '';
+---
+
+<div class:list={['kit-lane-row', className]} {...attributes}><div class="kit-lane-wrap">
+  <nav class="kit-lanes" aria-label={label}>
+    {lanes.map((lane) => <a href={lane.href} aria-current={lane.current ? 'page' : undefined}>{lane.label}</a>)}
+    <Fragment set:html={items} />
+  </nav>
+  <details class="kit-lane-picker" data-kit-menu>
+    <summary><span>{picker}</span>
+      <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5 6 8l3.5-3.5" /></svg>
+    </summary>
+    <nav aria-label={label}>
+      {lanes.map((lane) => <a href={lane.href} aria-current={lane.current ? 'page' : undefined}>{lane.label}</a>)}
+      <Fragment set:html={items} />
+    </nav>
+  </details>
+</div></div>
+
+<script>
+  // Closing the picker and the menus in it (menus.js, shared with LanguageMenu).
+  import './menus.js';
+
+  // The row is as wide as its lanes until the space runs out, then as wide as the space: its own
+  // size changes whenever fitting could change (the window, a font arriving), so watching it is
+  // enough.
+  for (const row of document.querySelectorAll<HTMLElement>('.kit-lane-row')) {
+    const lanes = row.querySelector<HTMLElement>('.kit-lanes');
+    if (!lanes) continue;
+    new ResizeObserver(() => {
+      row.dataset.lanes = lanes.scrollWidth > lanes.clientWidth ? 'picker' : 'row';
+    }).observe(lanes);
+  }
+</script>
+
+<style is:global>
+  .kit-lane-row {
+    border-bottom: var(--kit-lane-border, 0);
+    font-family: var(--kit-lane-font, inherit);
+    font-size: var(--kit-lane-size, .8125rem);
+    line-height: var(--kit-lane-leading, inherit);
+    letter-spacing: var(--kit-lane-tracking, normal);
+    text-transform: var(--kit-lane-case, none);
+  }
+  /* The page's column. A grid of one column no wider than the space, so the row can be as wide as
+     its lanes and sit on either side or the middle (--kit-lane-align), while the picker takes the
+     column's width. */
+  .kit-lane-wrap {
+    box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr);
+    width: 100%; max-width: var(--kit-wrap-max, 72rem); margin-inline: auto; padding-inline: var(--kit-wrap-pad, 1rem);
+  }
+  /* Nothing clips the row, so a menu in it can hang below; only the hidden row is clipped. */
+  .kit-lanes {
+    display: flex; gap: var(--kit-lane-gap, 1.5rem);
+    width: max-content; max-width: 100%; justify-self: var(--kit-lane-align, start);
+  }
+  .kit-lanes > a, .kit-lane-picker > nav > a {
+    display: inline-flex; align-items: center; min-height: 44px; flex: none;
+    color: var(--ink-muted); text-decoration-line: none;
+  }
+  .kit-lanes > a[aria-current], .kit-lane-picker > nav > a[aria-current] {
+    color: var(--ink);
+    text-decoration: underline var(--kit-lane-underline-thickness, 1px);
+    text-underline-offset: var(--kit-lane-underline-offset, .4em);
+  }
+  @media (hover: hover) {
+    .kit-lanes > a:hover, .kit-lane-picker > nav > a:hover { color: var(--kit-lane-hover, var(--ink)); }
+  }
+  .kit-lane-picker { display: none; }
+  .kit-lane-row[data-lanes="picker"] > .kit-lane-wrap > .kit-lanes { height: 0; visibility: hidden; overflow: hidden; }
+  .kit-lane-row[data-lanes="picker"] > .kit-lane-wrap > .kit-lane-picker { display: block; }
+  .kit-lane-picker > summary {
+    display: flex; align-items: center; justify-content: var(--kit-lane-align, start); gap: .4rem;
+    min-height: 44px; color: var(--ink); cursor: pointer; list-style: none;
+  }
+  .kit-lane-picker > summary::-webkit-details-marker { display: none; }
+  .kit-lane-picker[open] > summary > svg { transform: rotate(180deg); }
+  .kit-lane-picker > nav {
+    display: flex; flex-direction: column; align-items: var(--kit-lane-align, start);
+    padding-bottom: var(--kit-lane-picker-end, .5rem);
+  }
+</style>
