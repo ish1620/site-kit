@@ -102,8 +102,10 @@ const items = Astro.slots.has('default') ? await Astro.slots.render('default') :
     color: var(--ink-muted); text-decoration-line: none;
   }
   .kit-lanes > a[aria-current], .kit-lane-picker > nav > a[aria-current] {
-    color: var(--ink);
-    text-decoration: underline var(--kit-lane-underline-thickness, 1px);
+    color: var(--ink); text-decoration-line: underline;
+    text-decoration-thickness: var(--kit-lane-underline-thickness, 1px);
+    /* In the text's colour even where a site's link rule tints underlines on hover. */
+    text-decoration-color: currentColor;
     text-underline-offset: var(--kit-lane-underline-offset, .4em);
   }
   @media (hover: hover) {
