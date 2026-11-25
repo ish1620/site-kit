@@ -1,0 +1,91 @@
+---
+// The languages as a drop-down, for a site that fills SiteHeader's `languages` slot with it (the
+// row of codes, LanguageNav, stays the default). The browser's own <details>, so it opens and its
+// links work without JavaScript:
+// - closed: the current language's code and a chevron. Screen readers hear "Language: en" (the
+//   kit's word for the languages, then the code), so voice control can say what it sees;
+// - open: every language of the site in its order, each under its own name (LANGUAGES in
+//   i18n.js): the current one a plain word, underlined and marked aria-current; one this page
+//   exists in, a link to that version; one it doesn't, a faint word, not a link.
+// lang="" has each name read in its own language. Tap areas are 44px tall. The list hangs under
+// the code, its right edge on the code's.
+// menus.js closes it on a press outside and on Escape (data-kit-menu); remember-lang.js remembers
+// a plain click on a language, as on the codes.
+// The look comes from the site's CSS variables (--kit-langmenu-*, listed in README.md).
+import type { Locales } from './i18n.js';
+
+interface Props {
+  i18n: Locales<any>;
+  lang: string;
+  // The same page in each language it exists in.
+  alternates?: Partial<Record<string, string>>;
+}
+
+const { i18n, lang, alternates = {} } = Astro.props;
+const { LOCALES, LANG_TAG, LANG_NAME, KIT_UI } = i18n;
+const word = KIT_UI[lang].langNav;
+---
+
+<details class="kit-langmenu" data-kit-menu>
+  <summary><span class="kit-langmenu-prefix">{word}: </span><span class="kit-langmenu-code" lang={LANG_TAG[lang]}>{lang}</span><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5 6 8l3.5-3.5" /></svg></summary>
+  <nav class="kit-langmenu-list" aria-label={word}>
+    {LOCALES.map((l: string) => {
+      const tag = LANG_TAG[l];
+      const name = LANG_NAME[l];
+      if (l === lang) return <span class="kit-langmenu-item" aria-current="page" lang={tag}>{name}</span>;
+      const href = alternates[l];
+      if (!href) return <span class="kit-langmenu-item kit-langmenu-missing" lang={tag}>{name}</span>;
+      return <a class="kit-langmenu-item" href={href} hreflang={tag} lang={tag} data-lang={l}>{name}</a>;
+    })}
+  </nav>
+</details>
+
+<script>
+  // Closing (menus.js) and remembering the language (remember-lang.js), both shared.
+  import './menus.js';
+  import './remember-lang.js';
+</script>
+
+<style is:global>
+  .kit-langmenu {
+    position: relative; flex-shrink: 0;
+    /* The code's tap area reaches past its letters toward the screen edge, so the letters stay on
+       the page's edge. */
+    margin-inline-end: calc(-1 * var(--kit-langmenu-reach, 0px));
+    font-family: var(--kit-langmenu-font, inherit);
+    font-size: var(--kit-langmenu-size, .8125rem);
+    letter-spacing: var(--kit-langmenu-tracking, .02em);
+  }
+  .kit-langmenu > summary {
+    display: flex; align-items: center; gap: var(--kit-langmenu-chevron-gap, .35rem);
+    min-height: 44px; padding-inline: var(--kit-langmenu-pad, 0);
+    color: var(--ink-muted); cursor: pointer; list-style: none;
+  }
+  .kit-langmenu > summary::-webkit-details-marker { display: none; }
+  .kit-langmenu[open] > summary { color: var(--ink); }
+  .kit-langmenu[open] > summary > svg { transform: rotate(180deg); }
+  /* Read by screen readers, not shown. */
+  .kit-langmenu-prefix {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
+  .kit-langmenu-list {
+    position: absolute; top: calc(100% - var(--kit-langmenu-lift, 0px)); right: 0;
+    z-index: 1; display: flex; flex-direction: column;
+    min-width: var(--kit-langmenu-width, 8.5rem); padding-block: var(--kit-langmenu-list-pad, .25rem);
+    background: var(--kit-langmenu-bg, var(--paper));
+    border: var(--kit-langmenu-border, 1px solid var(--ink-faint));
+  }
+  .kit-langmenu-item {
+    display: flex; align-items: center; min-height: 44px;
+    padding-inline: var(--kit-langmenu-item-pad, 1rem);
+    color: var(--ink-muted); white-space: nowrap; text-decoration-line: none;
+    text-decoration-thickness: var(--kit-langmenu-underline-thickness, 1px);
+    text-underline-offset: var(--kit-langmenu-underline-offset, 4px);
+  }
+  .kit-langmenu-item[aria-current] { color: var(--ink); text-decoration-line: underline; }
+  .kit-langmenu-missing { color: var(--ink-faint); }
+  @media (hover: hover) {
+    .kit-langmenu > summary:hover, a.kit-langmenu-item:hover { color: var(--kit-langmenu-hover, var(--ink)); }
+  }
+</style>
