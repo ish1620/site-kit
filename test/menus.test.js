@@ -2,7 +2,7 @@
 // Node has no DOM: the page here is a few made-up elements with just what the modules use.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { toCloseOnPress, toCloseOnEscape, toCloseOnLink } from '../src/menus.js';
+import { INTERACTIVE, toCloseOnPress, toCloseOnEscape, toCloseOnClick } from '../src/menus.js';
 
 // An element: its tag, attributes and children; `open` for a <details>.
 class El {
@@ -12,8 +12,10 @@ class El {
   }
   contains(node) { for (let n = node; n; n = n.parent) if (n === this) return true; return false; }
   *descendants() { for (const c of this.children) { yield c; yield* c.descendants(); } }
-  // Only the selectors the modules use: tag[attr], tag and :is(.a, .b) tag[attr].
+  // Only the selectors the modules use: lists of tag[attr], tag and :is(.a, .b) tag[attr].
   matches(selector) {
+    const list = selector.split(/,(?![^(]*\))/);
+    if (list.length > 1) return list.some((one) => this.matches(one.trim()));
     const m = selector.match(/^(?::is\(([^)]*)\) )?([a-z]+)(?:\[([a-z-]+)\])?$/);
     if (!m) throw new Error(`the fake DOM can't match ${selector}`);
     const [, within, tag, attr] = m;
@@ -44,7 +46,14 @@ function page() {
   const picker = el('details', { class: 'kit-lane-picker', 'data-kit-menu': '' }, pickerSummary, pickerNav);
   const plainDetails = el('details', {}, el('summary', {}));
   const text = el('p', {});
-  const body = el('body', {}, el('header', {}, langMenu), picker, plainDetails, text);
+  // Below the menus: things that act on a click, one of them through an element inside it.
+  const wordInLink = el('span', {});
+  const linkBelow = el('a', { href: '/below/' }, wordInLink);
+  const button = el('button', {});
+  const field = el('input', {});
+  const label = el('label', {});
+  const anchorWithoutHref = el('a', {});
+  const body = el('body', {}, el('header', {}, langMenu), picker, plainDetails, text, linkBelow, button, field, label, anchorWithoutHref);
   const listeners = {};
   const doc = {
     activeElement: body,
@@ -54,19 +63,41 @@ function page() {
     fire(type, event) { for (const fn of listeners[type] ?? []) fn(event); },
   };
   for (const d of body.descendants()) d.document = doc;
-  return { doc, body, langMenu, langSummary, langLink, picker, pickerSummary, pickerNav, laneLink, notes, notesSummary, noteLink, plainDetails, text };
+  return { doc, body, langMenu, langSummary, langLink, picker, pickerSummary, pickerNav, laneLink, notes, notesSummary, noteLink, plainDetails, text,
+    wordInLink, linkBelow, button, field, label, anchorWithoutHref };
 }
 
 test('a press closes the open menus that don\'t hold it', () => {
   const p = page();
-  assert.deepEqual(toCloseOnPress([p.langMenu], p.text), [p.langMenu], 'outside: closed');
+  assert.deepEqual(toCloseOnPress([p.langMenu], p.text), [p.langMenu], 'outside, on plain text: closed on the press');
+  assert.deepEqual(toCloseOnPress([p.langMenu], p.anchorWithoutHref), [p.langMenu], 'an <a> without href is no link');
   assert.deepEqual(toCloseOnPress([p.langMenu], p.langLink), [], 'inside: stays');
   assert.deepEqual(toCloseOnPress([p.langMenu], p.langSummary), [], 'its own summary: left to the browser');
   assert.deepEqual(toCloseOnPress([p.picker, p.notes], p.pickerNav), [p.notes], 'in the picker outside its nested menu: only the nested one');
   assert.deepEqual(toCloseOnPress([p.picker, p.notes], p.text), [p.picker, p.notes], 'outside both: both');
-  assert.deepEqual(toCloseOnPress([p.langMenu, p.picker], p.pickerSummary), [p.langMenu], 'opening another menu closes the first');
   assert.deepEqual(toCloseOnPress([p.langMenu], null), [p.langMenu], 'no target: closed');
   assert.deepEqual(toCloseOnPress([], p.text), []);
+});
+
+test('a press on something that acts on a click waits for the click', () => {
+  const p = page();
+  assert.equal(INTERACTIVE, 'a[href], button, summary, input, select, textarea, label');
+  for (const name of ['linkBelow', 'wordInLink', 'button', 'field', 'label', 'pickerSummary']) {
+    assert.deepEqual(toCloseOnPress([p.picker, p.langMenu], p[name]), [], name);
+  }
+});
+
+test('a click closes the open menus that don\'t hold it, and those that hold the link it chooses', () => {
+  const p = page();
+  assert.deepEqual(toCloseOnClick([p.picker], p.linkBelow), [p.picker], 'a link below the picker: closed on its click');
+  assert.deepEqual(toCloseOnClick([p.picker], p.wordInLink), [p.picker], 'inside that link');
+  assert.deepEqual(toCloseOnClick([p.picker, p.langMenu], p.button), [p.picker, p.langMenu], 'a button outside both');
+  assert.deepEqual(toCloseOnClick([p.langMenu, p.picker], p.pickerSummary), [p.langMenu], 'opening another menu closes the first');
+  assert.deepEqual(toCloseOnClick([p.picker, p.notes], p.noteLink), [p.picker, p.notes], 'a link chosen inside: every menu holding it');
+  assert.deepEqual(toCloseOnClick([p.picker, p.notes], p.laneLink), [p.picker, p.notes], 'a lane in the picker: the picker, and Notes beside it');
+  assert.deepEqual(toCloseOnClick([p.picker, p.notes], p.notesSummary), [], 'a summary inside: left to the browser');
+  assert.deepEqual(toCloseOnClick([p.picker, p.notes], p.pickerNav), [p.notes], 'in the picker outside Notes: Notes, as on the press');
+  assert.deepEqual(toCloseOnClick([], p.linkBelow), []);
 });
 
 test('Escape closes the innermost open menu', () => {
@@ -75,14 +106,6 @@ test('Escape closes the innermost open menu', () => {
   assert.deepEqual(toCloseOnEscape([p.notes, p.picker]), [p.notes], 'whatever the order');
   assert.deepEqual(toCloseOnEscape([p.picker]), [p.picker]);
   assert.deepEqual(toCloseOnEscape([]), []);
-});
-
-test('a link click closes the open menus that hold the link', () => {
-  const p = page();
-  assert.deepEqual(toCloseOnLink([p.picker, p.notes], p.noteLink), [p.picker, p.notes]);
-  assert.deepEqual(toCloseOnLink([p.picker, p.notes], p.laneLink), [p.picker]);
-  assert.deepEqual(toCloseOnLink([p.langMenu], p.laneLink), [], 'a link elsewhere');
-  assert.deepEqual(toCloseOnLink([p.langMenu], null), [], 'not a link');
 });
 
 // The wiring, on the made-up page: the module is imported again under another address, so Node
@@ -127,6 +150,17 @@ test('wired: a press outside closes a menu; a press in the picker closes only th
   assert.equal(p.plainDetails.open, true, 'a <details> without data-kit-menu is left alone');
 });
 
+test('wired: a tap on a link below the open picker keeps it open until the click, which closes it', async () => {
+  const p = await wiredPage();
+  for (const target of ['linkBelow', 'wordInLink', 'button']) {
+    p.picker.open = true;
+    p.doc.fire('pointerdown', { target: p[target] });
+    assert.equal(p.picker.open, true, `${target}: still open after the press, so nothing below moves before the release`);
+    p.doc.fire('click', { target: p[target] });
+    assert.equal(p.picker.open, false, `${target}: closed on the click`);
+  }
+});
+
 test('wired: Escape closes the innermost menu, the focus back on its summary when it was inside', async () => {
   const p = await wiredPage();
   p.picker.open = p.notes.open = true;
@@ -153,6 +187,8 @@ test('wired: a link chosen inside a menu closes it', async () => {
   p.doc.fire('click', { target: p.noteLink });
   assert.deepEqual([p.picker.open, p.notes.open], [false, false]);
   p.langMenu.open = true;
+  p.doc.fire('click', { target: p.langMenu.querySelector('nav') });
+  assert.equal(p.langMenu.open, true, 'a click inside that is no link leaves it');
   p.doc.fire('click', { target: p.text });
-  assert.equal(p.langMenu.open, true, 'a click that is no link leaves it');
+  assert.equal(p.langMenu.open, false, 'a click outside closes it');
 });
