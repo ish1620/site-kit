@@ -2,9 +2,9 @@
 
   python3 -I scripts/check_sites.py before [<site folder>...]
                                           build each site, keep a copy
-  python3 -I scripts/check_sites.py after [--release] [--without <tag>]... [--changed-asset <name>]... [<site folder>...]
+  python3 -I scripts/check_sites.py after [--release] [<planned change>...] [<site folder>...]
                                           build again, compare with the copy
-  python3 -I scripts/check_sites.py compare [--without <tag>]... [--changed-asset <name>]... <build A> <build B>
+  python3 -I scripts/check_sites.py compare [<planned change>...] <build A> <build B>
                                           compare two build folders
 
 Sites: with no folders, "before" and "after" take every folder beside the kit whose package.json
@@ -28,18 +28,30 @@ The comparison:
   rest of the body, and the doctype and <html> tag, with a diff of the first changed head and
   header; a change outside all four (spacing in the head, say) is listed as elsewhere.
 
-Planned changes ("after" and "compare"):
-- --without <tag> (repeatable): cut every element with that tag from each HTML page of both builds
-  before comparing, so a planned markup change on every page doesn't hide what else changed. The
-  report's first line says what was taken out; an unclosed element is an error.
-- --changed-asset <name> (repeatable): allow the asset with that name (without its hash, such as
-  Base.css) to differ. Pages and assets that differ only through it count as the same, and its own
-  diff is printed. An asset that does not differ or does not exist in both builds is an error.
+Planned changes ("after" and "compare"), each repeatable. Each must find exactly what it names, or
+nothing is compared (exit status 2), so a typo can't hide a change:
+- --without <tag> or --without <tag>.<class>: cut every element with that tag (and with that class
+  word among its classes, its case kept: div.lane-row) from each HTML page of both builds before
+  comparing, so a planned markup change on every page doesn't hide what else changed. The report's
+  first line says what was taken out; an unclosed element is an error, and so is a <tag>.<class>
+  that matches no element in either build.
+- --changed-asset <name>: allow the asset with that name (without its hash, such as Base.css) to
+  differ. Pages and assets that differ only through it count as the same, and its own diff is
+  printed. It must be in both builds, once each, and differ.
+- --renamed-asset <old> <new>: pair the asset named <old> in before with the one named <new> in
+  after (names without their hash), as --changed-asset does with one name; their diff is printed.
+  <old> must be in before once and not in after, <new> in after once and not in before.
+- --new-asset <name>: allow an asset that only after has (a chunk the build split off, say); its
+  content is printed. It must be in after once and not in before.
+- --replace <old> <new>: replace the text <old> with <new> in the before build's pages (its HTML
+  files) before comparing, for a planned change of wording; the after build's pages are left as
+  they are, so one that still holds <old> differs. <old> must be in a page of the before build,
+  and differ from <new>. Plain text: a page that writes <old> in its own words differs too.
 
 Exit status: 0 when nothing differs; 1 when something does; 2 when nothing could be compared: a
 usage error, no site, the wrong kit, a failed build, a build folder that is missing or has no HTML
-page, assets that refer to each other in a cycle, an unclosed --without element, or a
---changed-asset that doesn't exist in both builds or didn't differ. The header's look is checked
+page, assets that refer to each other in a cycle, or a planned change that doesn't find exactly
+what it names (above). The header's look is checked
 in a browser instead (scripts/measure-header.js).
 """
 import difflib
@@ -65,6 +77,10 @@ NAME = re.compile(rb'[\w.-]+')
 HASHED = re.compile(rb'(.+)\.[A-Za-z0-9_-]{8}(\.[A-Za-z0-9]+)')
 # An HTML tag name accepted by --without: ASCII letter, then letters, digits or hyphens.
 TAG_NAME = re.compile(r'[A-Za-z][A-Za-z0-9-]*')
+# A --without value: a tag name, or a tag name, a dot and one class word (letters, digits, "-", "_").
+WITHOUT = re.compile(TAG_NAME.pattern + r'(?:\.[A-Za-z0-9_-]+)?')
+# The planned-change options of "after" and "compare", and how many values each takes.
+PLANNED = {'--without': 1, '--changed-asset': 1, '--renamed-asset': 2, '--new-asset': 1, '--replace': 2}
 VOID_ELEMENTS = frozenset({
     'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
     'link', 'meta', 'source', 'track', 'wbr',
@@ -82,15 +98,24 @@ def keyed(data: bytes, keys: dict) -> bytes:
     return NAME.sub(lambda m: keys.get(m.group(), m.group()), data)
 
 
-def asset_keys(root: Path, planned=()):
-    """The files in a build's _astro/ by name, and each one's key, worked out from the leaves up."""
+def plain_of(name: bytes) -> bytes:
+    """An asset's name without its hash."""
+    hashed = HASHED.fullmatch(name)
+    return hashed.group(1) + hashed.group(2) if hashed else name
+
+
+def asset_keys(root: Path, planned=None):
+    """The files in a build's _astro/ by name, and each one's key, worked out from the leaves up.
+
+    planned maps a plain name to the key its asset takes whatever its content (a changed asset, or
+    the two names of a renamed one), so pages and assets that only follow it count as the same."""
     paths = {}
     for f in sorted((root / '_astro').rglob('*')):
         if f.is_file():
             if f.name.encode() in paths:
                 raise CheckError(f'two assets named {f.name} in {root}')
             paths[f.name.encode()] = f
-    planned = set(planned)
+    planned = planned or {}
     keys, chain = {}, []
 
     def key(name):
@@ -103,11 +128,9 @@ def asset_keys(root: Path, planned=()):
             for other in sorted(set(NAME.findall(data)) & paths.keys()):
                 key(other)
             chain.pop()
-            hashed = HASHED.fullmatch(name)
-            plain = hashed.group(1) + hashed.group(2) if hashed else name
+            plain = plain_of(name)
             if plain in planned:
-                # Shared key so pages and assets that only follow this change still count as the same.
-                keys[name] = plain + b'#changed'
+                keys[name] = planned[plain]
             else:
                 keys[name] = plain + b'#' + hashlib.sha256(keyed(data, keys)).hexdigest()[:16].encode()
 
@@ -127,7 +150,7 @@ def css_rules(text: str) -> list:
 class Build:
     """A build folder: its assets' keys and its other files. Missing or without a page is an error."""
 
-    def __init__(self, root: Path, planned=()):
+    def __init__(self, root: Path, planned=None):
         if not root.is_dir():
             raise CheckError(f'no build folder: {root}')
         self.root = root
@@ -210,9 +233,18 @@ def show_diff(title, before: list, after: list, limit=40):
         print(f'    … and {len(lines) - limit} more lines')
 
 
-def strip_elements(html: str, tags, where: str = '') -> str:
-    """Cut every element whose tag is in tags from an HTML document; raise CheckError if unclosed."""
-    drop = {t.lower() for t in tags}
+def without_spec(spec: str):
+    """A --without value as (tag, class word or None): the tag in lower case, the class as written."""
+    tag, _, word = spec.partition('.')
+    return tag.lower(), word or None
+
+
+def strip_elements(html: str, tags, where: str = '', counts=None) -> str:
+    """Cut every element named in tags from an HTML document; raise CheckError if one is unclosed.
+
+    Each of tags is a tag ("footer") or a tag and one exact class word ("div.lane-row"). counts, a
+    Counter, if given, gains how many elements each one cut."""
+    drop = [without_spec(t) for t in tags]
     if not drop:
         return html
     # HTMLParser counts lines on '\n' alone, so build the offset table the same way.
@@ -232,13 +264,23 @@ def strip_elements(html: str, tags, where: str = '') -> str:
             super().__init__(convert_charrefs=False)
             self.cuts, self.outer, self.depth, self.start = [], None, 0, 0
 
+        def dropped(self, tag, attrs):
+            """The spec this element matches, or None."""
+            words = next((v or '' for k, v in attrs if k == 'class'), '').split()
+            for spec, (t, word) in zip(tags, drop):
+                if t == tag and (word is None or word in words):
+                    if counts is not None:
+                        counts[spec] += 1
+                    return spec
+            return None
+
         def index(self):
             line, col = self.getpos()
             return starts[line - 1] + col
 
         def handle_starttag(self, tag, attrs):
             if self.outer is None:
-                if tag in drop:
+                if self.dropped(tag, attrs):
                     idx = self.index()
                     if tag in VOID_ELEMENTS:
                         self.cuts.append((idx, idx + len(self.get_starttag_text())))
@@ -248,7 +290,7 @@ def strip_elements(html: str, tags, where: str = '') -> str:
                 self.depth += 1
 
         def handle_startendtag(self, tag, attrs):
-            if self.outer is None and tag in drop:
+            if self.outer is None and self.dropped(tag, attrs):
                 idx = self.index()
                 self.cuts.append((idx, idx + len(self.get_starttag_text())))
 
@@ -276,13 +318,17 @@ def strip_elements(html: str, tags, where: str = '') -> str:
     return ''.join(parts)
 
 
+def named(build: Build, plain: bytes) -> list:
+    """The assets of a build whose name without the hash is plain."""
+    return [n for n in sorted(build.paths) if plain_of(n) == plain]
+
+
 def resolve_planned(b: Build, a: Build, planned: list) -> list:
-    """Check that each planned asset exists uniquely in both builds and differs; return its keyed pair."""
+    """Check that each changed asset exists uniquely in both builds and differs; return its keyed pair."""
     pairs = []
     for plain in planned:
         label = plain.decode()
-        in_b = [n for n, k in sorted(b.keys.items()) if plain_name(k) == plain]
-        in_a = [n for n, k in sorted(a.keys.items()) if plain_name(k) == plain]
+        in_b, in_a = named(b, plain), named(a, plain)
         if not in_b and not in_a:
             raise CheckError(f'changed asset {label} is not in either build')
         if not in_b:
@@ -298,6 +344,50 @@ def resolve_planned(b: Build, a: Build, planned: list) -> list:
             raise CheckError(f'changed asset {label} did not differ')
         pairs.append((plain, data_b, data_a))
     return pairs
+
+
+def only_once(build: Build, plain: bytes, other: Build, what: str) -> bytes:
+    """The one asset named plain in build, which other must not have; CheckError otherwise."""
+    label, here, there = plain.decode(), named(build, plain), named(other, plain)
+    if len(here) != 1:
+        raise CheckError(f'{what} {label}: {len(here)} assets of that name in {build.root}, not one')
+    if there:
+        raise CheckError(f'{what} {label} is also in {other.root}')
+    return here[0]
+
+
+def resolve_renamed(b: Build, a: Build, renamed: list) -> list:
+    """Check each renamed pair (old once in before and not after, new once in after and not before);
+    return (label, before's content, after's content)."""
+    pairs = []
+    for old, new in renamed:
+        name_b = only_once(b, old, a, 'renamed asset')
+        name_a = only_once(a, new, b, 'renamed asset')
+        pairs.append((old + ' → '.encode() + new, b.read_asset(name_b), a.read_asset(name_a)))
+    return pairs
+
+
+def resolve_new(b: Build, a: Build, new_assets: list) -> list:
+    """Check each new asset (once in after, not in before); return (its name, its content)."""
+    return [(name, a.read_asset(name)) for name in (only_once(a, plain, b, 'new asset') for plain in new_assets)]
+
+
+def show_new_asset(name: bytes, data: bytes, limit=40, width=200):
+    """Print a new asset's content, bounded."""
+    label = name.decode()
+    try:
+        text = data.decode('utf-8')
+    except UnicodeDecodeError:
+        text = None
+    if text is None or '\x00' in text:
+        print(f'  new asset, {label}: binary ({len(data)} bytes)')
+        return
+    lines = css_rules(text) if name.endswith(b'.css') else text.splitlines()
+    print(f'  new asset, {label}:')
+    for line in lines[:limit]:
+        print(f'    {line[:width]}')
+    if len(lines) > limit:
+        print(f'    … and {len(lines) - limit} more lines')
 
 
 def show_changed_lines(title, before: list, after: list, limit=40, width=200):
@@ -354,28 +444,54 @@ def show_planned_diff(plain: bytes, data_b: bytes, data_a: bytes):
     show_changed_lines(f'planned change, {label}', lines_b, lines_a)
 
 
-def compare(before: Path, after: Path, without=(), changed_assets=()) -> bool:
+def compare(before: Path, after: Path, without=(), changed_assets=(), renamed=(), new_assets=(), replace=()) -> bool:
     """Print what differs between two build folders; return True if nothing does."""
-    planned = [name.encode() for name in changed_assets]
-    b, a = Build(before, planned), Build(after, planned)
-    planned_pairs = resolve_planned(b, a, planned)
+    changed = [name.encode() for name in changed_assets]
+    renamed = [(old.encode(), new.encode()) for old, new in renamed]
+    new_assets = [name.encode() for name in new_assets]
+    replace = [(old.encode(), new.encode()) for old, new in replace]
+    for old, new in replace:
+        if old == new:
+            raise CheckError(f'--replace {old.decode()}: the new text is the same as the old')
+    shared = {plain: plain + b'#changed' for plain in changed}
+    pair_keys = {(old, new): old + b'>' + new + b'#renamed' for old, new in renamed}
+    b = Build(before, {**shared, **{old: k for (old, _), k in pair_keys.items()}})
+    a = Build(after, {**shared, **{new: k for (_, new), k in pair_keys.items()}})
+    planned_pairs = resolve_planned(b, a, changed)
+    renamed_pairs = resolve_renamed(b, a, renamed)
+    new_files = resolve_new(b, a, new_assets)
+    for old, _ in replace:
+        if not any(old in (before / f).read_bytes() for f in sorted(b.files) if f.suffix == '.html'):
+            raise CheckError(f'--replace {old.decode()}: not in any page of {before}')
 
     common = b.files & a.files
     pages = sorted(f for f in common if f.suffix == '.html')
+    cut = Counter()
     # A page only one build has is reported as before, but a named element left open in it is
     # still the error it is anywhere else.
     for build_, root in ((b, before), (a, after)):
         other = a if build_ is b else b
         for f in sorted(build_.files - other.files) if without else ():
             if f.suffix == '.html':
-                strip_elements(build_.read(f).decode('utf-8', 'surrogateescape'), without, str(root / f))
-    stripped = {}
-    if without:
+                strip_elements(build_.read(f).decode('utf-8', 'surrogateescape'), without, str(root / f), cut)
+    prepared = {}
+    if without or replace:
         for f in pages:
-            page_b = strip_elements(b.read(f).decode('utf-8', 'surrogateescape'), without, str(before / f))
-            page_a = strip_elements(a.read(f).decode('utf-8', 'surrogateescape'), without, str(after / f))
-            stripped[f] = (page_b.encode('utf-8', 'surrogateescape'), page_a.encode('utf-8', 'surrogateescape'))
+            page_b, page_a = b.read(f), a.read(f)
+            # Before's pages only: the after build must hold the new text by itself.
+            for old, new in replace:
+                page_b = page_b.replace(old, new)
+            if without:
+                page_b = strip_elements(page_b.decode('utf-8', 'surrogateescape'), without, str(before / f), cut).encode('utf-8', 'surrogateescape')
+                page_a = strip_elements(page_a.decode('utf-8', 'surrogateescape'), without, str(after / f), cut).encode('utf-8', 'surrogateescape')
+            prepared[f] = (page_b, page_a)
+    for spec in without:
+        if without_spec(spec)[1] and not cut[spec]:
+            raise CheckError(f'--without {spec}: no such element in either build')
+    if without:
         print(f'  without: {", ".join(f"<{t}>" for t in without)}')
+    for old, new in replace:
+        print(f'  replaced in the before pages: {old.decode()} → {new.decode()}')
 
     same = True
 
@@ -400,7 +516,8 @@ def compare(before: Path, after: Path, without=(), changed_assets=()) -> bool:
     report('only after', a.files - b.files)
     report('other files changed', [f for f in common if f.suffix != '.html' and differs(f)])
 
-    gone, new = b.unmatched(a), a.unmatched(b)
+    new_names = {name for name, _ in new_files}
+    gone, new = b.unmatched(a), [n for n in a.unmatched(b) if n not in new_names]
     report('assets changed or removed (before)', [n.decode() for n in gone])
     report('assets changed or added (after)', [n.decode() for n in new])
     count_b, count_a = (Counter(map(plain_name, x.keys.values())) for x in (b, a))
@@ -411,10 +528,17 @@ def compare(before: Path, after: Path, without=(), changed_assets=()) -> bool:
             show_diff(f'CSS rules, {plain.decode()}', b.rules(name), a.rules(counterpart))
     for plain, data_b, data_a in planned_pairs:
         show_planned_diff(plain, data_b, data_a)
+    for label, data_b, data_a in renamed_pairs:
+        if data_b == data_a:
+            print(f'  renamed, {label.decode()}: same content')
+        else:
+            show_planned_diff(label, data_b, data_a)
+    for name, data in new_files:
+        show_new_asset(name, data)
 
     changed, elsewhere, diffs = {part: [] for part in PARTS}, [], {}
     for f in pages:
-        page_b, page_a = stripped[f] if without else (b.read(f), a.read(f))
+        page_b, page_a = prepared[f] if f in prepared else (b.read(f), a.read(f))
         if page_b == page_a:
             continue
         parts_b, parts_a = page_parts(page_b), page_parts(page_a)
@@ -508,47 +632,61 @@ def build(site: Path) -> Path:
     return dist
 
 
+def option_value(name: str, values: list):
+    """The planned-change option's values as given, or None when they aren't valid."""
+    if name == '--without':
+        return values[0] if WITHOUT.fullmatch(values[0]) else None
+    if name == '--replace':
+        return tuple(values) if values[0] else None
+    if any(not v or v.startswith('-') for v in values):  # an asset's name
+        return None
+    return tuple(values) if len(values) > 1 else values[0]
+
+
 def run(argv) -> int:
     command, args = (argv[0], argv[1:]) if argv else (None, [])
-    release, without, changed_assets, folders = False, [], [], []
+    release, folders = False, []
+    planned = {name: [] for name in PLANNED}
     usage = command not in ('before', 'after', 'compare')
     i = 0
     while not usage and i < len(args):
         arg = args[i]
+        name, eq, inline = arg.partition('=')
         if arg == '--release' and command == 'after':
             release = True
-        elif (arg == '--without' or arg.startswith('--without=')) and command in ('after', 'compare'):
-            if arg == '--without':
-                i += 1
-                val = args[i] if i < len(args) else ''
+        elif name in PLANNED and command in ('after', 'compare'):
+            count = PLANNED[name]
+            if eq and count == 1:
+                values = [inline]
+            elif eq:  # two values are given apart, not as --option=value
+                values = None
             else:
-                val = arg.split('=', 1)[1]
-            if not TAG_NAME.fullmatch(val):
+                values = args[i + 1:i + 1 + count]
+                i += count
+            value = option_value(name, values) if values and len(values) == count else None
+            if value is None:
                 usage = True
             else:
-                without.append(val.lower())
-        elif (arg == '--changed-asset' or arg.startswith('--changed-asset=')) and command in ('after', 'compare'):
-            if arg == '--changed-asset':
-                i += 1
-                val = args[i] if i < len(args) else ''
-            else:
-                val = arg.split('=', 1)[1]
-            if not val or val.startswith('-'):
-                usage = True
-            else:
-                changed_assets.append(val)
+                planned[name].append(value)
         elif arg.startswith('-'):
             usage = True
         else:
             folders.append(arg)
         i += 1
-    without = list(dict.fromkeys(without))
-    changed_assets = list(dict.fromkeys(changed_assets))
     if usage or (command == 'compare' and len(folders) != 2):
         print(__doc__)
         return 2
+    options = {
+        # The tag in lower case, a class word as written.
+        'without': ['.'.join(filter(None, without_spec(v))) for v in planned['--without']],
+        'changed_assets': planned['--changed-asset'],
+        'renamed': planned['--renamed-asset'],
+        'new_assets': planned['--new-asset'],
+        'replace': planned['--replace'],
+    }
+    options = {k: list(dict.fromkeys(v)) for k, v in options.items()}
     if command == 'compare':
-        return 0 if compare(Path(folders[0]), Path(folders[1]), without=without, changed_assets=changed_assets) else 1
+        return 0 if compare(Path(folders[0]), Path(folders[1]), **options) else 1
 
     sites, problems = find_sites(folders), []
     for site, spec in sites:
@@ -568,7 +706,7 @@ def run(argv) -> int:
             print(f'  kept a copy in {snapshot}')
         else:
             print(f'{site.name}: before → after')
-            ok = compare(snapshot, dist, without=without, changed_assets=changed_assets) and ok
+            ok = compare(snapshot, dist, **options) and ok
     return 0 if ok else 1
 
 

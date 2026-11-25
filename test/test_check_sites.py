@@ -476,12 +476,183 @@ class Compare(Case):
             ('compare', '--without', '<footer>', self.tmp / 'a', self.tmp / 'b'),
             ('compare', '--changed-asset', self.tmp / 'a', self.tmp / 'b'),
             ('compare', '--changed-asset', '--without', 'footer', self.tmp / 'a', self.tmp / 'b'),
+            ('before', '--replace', 'a', 'b'),
+            ('before', '--renamed-asset', 'a.js', 'b.js'),
+            ('before', '--new-asset', 'a.js'),
+            ('compare', '--without', 'div.', self.tmp / 'a', self.tmp / 'b'),
+            ('compare', '--without', '.lane-row', self.tmp / 'a', self.tmp / 'b'),
+            ('compare', '--without', 'div.a.b', self.tmp / 'a', self.tmp / 'b'),
+            ('compare', '--without', 'div.a b', self.tmp / 'a', self.tmp / 'b'),
+            ('compare', '--replace', '', 'x', self.tmp / 'a', self.tmp / 'b'),
+            ('compare', '--replace=a', 'b', self.tmp / 'a', self.tmp / 'b'),
+            ('compare', self.tmp / 'a', self.tmp / 'b', '--replace', 'a'),
+            ('compare', '--renamed-asset', 'a.js', '--new-asset', 'b.js', self.tmp / 'a', self.tmp / 'b'),
+            ('compare', '--renamed-asset=a.js', 'b.js', self.tmp / 'a', self.tmp / 'b'),
+            ('compare', self.tmp / 'a', self.tmp / 'b', '--renamed-asset', 'a.js'),
+            ('compare', '--new-asset', '--without', 'footer', self.tmp / 'a', self.tmp / 'b'),
         ]:
             with self.subTest(args=args):
                 status, out = self.run_script(SCRIPT, *args)
                 self.assertEqual(status, 2, out)
-                self.assertLine(out, 'compare [--without <tag>]')
+                self.assertLine(out, 'compare [<planned change>...] <build A> <build B>')
 
+
+class PlannedChanges(Case):
+    """--replace, --renamed-asset, --new-asset and --without <tag>.<class> on made-up build folders."""
+
+    compare_with = Compare.compare_with
+
+    def assertStatus(self, wanted, before, after, *opts, line=()):
+        status, out = self.compare_with(before, after, *opts)
+        self.assertEqual(status, wanted, out)
+        if line:
+            self.assertLine(out, *line)
+        return out
+
+    # --replace
+
+    def named_page(self, name):
+        return {**BUILD, 'index.html': self.swap(PAGE, '<h1>Home</h1>', f'<h1>Home</h1><p title="{name}">{name}</p>')}
+
+    def test_replace_rewrites_the_before_pages(self):
+        before, after = self.named_page('简体中文'), self.named_page('中文')
+        self.assertStatus(1, before, after, line=('pages whose content (outside the header) changed (1)',))
+        out = self.assertStatus(0, before, after, '--replace', '简体中文', '中文', line=('identical',))
+        self.assertLine(out, 'replaced in the before pages', '简体中文 → 中文')
+
+    def test_replace_fails_when_the_after_build_still_holds_the_old_text(self):
+        before = self.named_page('简体中文')
+        after = {**before, 'about/index.html': before['index.html']}
+        before = {**before, 'about/index.html': self.named_page('中文')['index.html']}
+        self.assertStatus(1, before, before, '--replace', '简体中文', '中文',
+                          line=('pages whose content (outside the header) changed (1)',))
+        self.assertStatus(1, before, after, '--replace', '简体中文', '中文', line=('DIFFERENT',))
+
+    def test_replace_leaves_other_files_and_assets_alone(self):
+        before, after = self.named_page('简体中文'), self.named_page('中文')
+        self.assertStatus(1, {**before, 'sitemap.xml': '简体中文'}, {**after, 'sitemap.xml': '中文'},
+                          '--replace', '简体中文', '中文', line=('other files changed (1)',))
+        css_b, css_a = {**before, '_astro/Base.CIX-Jlc-.css': 'p{content:"简体中文"}'}, {**after, '_astro/Base.CIX-Jlc-.css': 'p{content:"中文"}'}
+        self.assertStatus(1, css_b, css_a, '--replace', '简体中文', '中文', line=('assets changed or removed (before) (1)',))
+
+    def test_replace_is_repeatable(self):
+        before = self.named_page('one two')
+        after = self.named_page('1 2')
+        self.assertStatus(1, before, after, '--replace', 'one', '1')
+        self.assertStatus(0, before, after, '--replace', 'one', '1', '--replace', 'two', '2')
+
+    def test_replace_must_find_its_text_and_change_it(self):
+        before, after = self.named_page('简体中文'), self.named_page('中文')
+        for opts, fragment in [
+            (('--replace', '繁體中文', '中文'), 'not in any page'),
+            (('--replace', '中文', '中文'), 'the same as the old'),
+        ]:
+            with self.subTest(opts=opts):
+                self.assertStatus(2, before, after, *opts, line=(opts[1], fragment))
+        # Only the before build's pages count: the text in after alone, or in an asset, is not found.
+        self.assertStatus(2, after, before, '--replace', '简体中文', '中文', line=('not in any page',))
+        self.assertStatus(2, {**after, '_astro/nav.sfTAO5_a.js': '简体中文'}, after, '--replace', '简体中文', '中文',
+                          line=('not in any page',))
+
+    # --renamed-asset and --new-asset
+
+    def scripted(self, src_name, src_body, extra=None):
+        page = self.swap(PAGE, 'nav.sfTAO5_a.js', src_name)
+        return {'index.html': page, '_astro/Base.CIX-Jlc-.css': CSS, f'_astro/{src_name}': src_body, **(extra or {})}
+
+    def test_renamed_asset_pairs_the_two_names_and_prints_their_diff(self):
+        before = self.scripted('Bar.astro_type_script.Ab12Cd34.js', 'measure();closeNotes();')
+        after = self.scripted('Row.astro_type_script.Zy98Xw76.js', 'measure();closeMenus();')
+        self.assertStatus(1, before, after, line=('assets changed or added (after) (1)',))
+        out = self.assertStatus(0, before, after, '--renamed-asset', 'Bar.astro_type_script.js', 'Row.astro_type_script.js',
+                                line=('identical',))
+        self.assertLine(out, 'planned change', 'Bar.astro_type_script.js → Row.astro_type_script.js')
+        self.assertLine(out, '+measure();closeMenus();')
+        same = self.scripted('Row.astro_type_script.Zy98Xw76.js', 'measure();closeNotes();')
+        self.assertStatus(0, before, same, '--renamed-asset', 'Bar.astro_type_script.js', 'Row.astro_type_script.js',
+                          line=('renamed', 'same content'))
+        # Another change is still reported.
+        moved = {**after, 'index.html': self.swap(after['index.html'], '<h1>Home</h1>', '<h1>Away</h1>')}
+        self.assertStatus(1, before, moved, '--renamed-asset', 'Bar.astro_type_script.js', 'Row.astro_type_script.js',
+                          line=('pages whose content (outside the header) changed (1)',))
+
+    def test_renamed_asset_must_find_each_name_once_on_its_side(self):
+        before = self.scripted('Bar.Ab12Cd34.js', 'a()')
+        after = self.scripted('Row.Zy98Xw76.js', 'b()')
+        for label, b, a, old, new, fragment in [
+            ('old not in before', before, after, 'Gone.js', 'Row.js', 'Gone.js: 0 assets'),
+            ('old twice in before', {**before, '_astro/Bar.Qq11Ww22.js': 'c()'}, after, 'Bar.js', 'Row.js', 'Bar.js: 2 assets'),
+            ('old still in after', before, {**after, '_astro/Bar.Qq11Ww22.js': 'c()'}, 'Bar.js', 'Row.js', 'Bar.js is also in'),
+            ('new not in after', before, after, 'Bar.js', 'Gone.js', 'Gone.js: 0 assets'),
+            ('new already in before', {**before, '_astro/Row.Qq11Ww22.js': 'c()'}, after, 'Bar.js', 'Row.js', 'Row.js is also in'),
+            ('swapped', before, after, 'Row.js', 'Bar.js', 'Row.js: 0 assets'),
+        ]:
+            with self.subTest(case=label):
+                self.assertStatus(2, b, a, '--renamed-asset', old, new, line=('renamed asset', fragment))
+
+    def test_new_asset_is_allowed_and_printed(self):
+        before = self.scripted('Bar.Ab12Cd34.js', 'a()')
+        after = self.scripted('Row.Zy98Xw76.js', 'import"./menus.Mm12Nn34.js";a()', {'_astro/menus.Mm12Nn34.js': 'closeMenus()'})
+        self.assertStatus(1, before, after, '--renamed-asset', 'Bar.js', 'Row.js', line=('assets changed or added (after) (1)',))
+        out = self.assertStatus(0, before, after, '--renamed-asset', 'Bar.js', 'Row.js', '--new-asset', 'menus.js', line=('identical',))
+        self.assertLine(out, 'new asset, menus.Mm12Nn34.js')
+        self.assertLine(out, 'closeMenus()')
+        # Only the asset named: a second new one is still reported.
+        more = {**after, '_astro/other.Oo12Pp34.js': 'x()'}
+        self.assertStatus(1, before, more, '--renamed-asset', 'Bar.js', 'Row.js', '--new-asset', 'menus.js',
+                          line=('assets changed or added (after) (1)',))
+
+    def test_new_asset_must_be_in_after_once_and_not_in_before(self):
+        before = BUILD
+        after = {**BUILD, '_astro/menus.Mm12Nn34.js': 'closeMenus()'}
+        for label, b, a, fragment in [
+            ('not in after', before, before, 'menus.js: 0 assets'),
+            ('twice in after', before, {**after, '_astro/menus.Qq11Ww22.js': 'y()'}, 'menus.js: 2 assets'),
+            ('already in before', {**before, '_astro/menus.Qq11Ww22.js': 'y()'}, after, 'menus.js is also in'),
+        ]:
+            with self.subTest(case=label):
+                self.assertStatus(2, b, a, '--new-asset', 'menus.js', line=('new asset', fragment))
+
+    # --without <tag>.<class>
+
+    def rowed(self, row):
+        return {**BUILD, 'index.html': self.swap(PAGE, '</header>', f'</header>{row}')}
+
+    def test_without_tag_and_class_cuts_each_build_by_its_own_class(self):
+        before = self.rowed('<div class="old-row"><div><a href="/">All</a></div></div>')
+        after = self.rowed('<div class="kit-row extra"><div class="inner"><nav><a href="/">All</a></nav></div></div>')
+        self.assertStatus(1, before, after)
+        out = self.assertStatus(0, before, after, '--without', 'div.old-row', '--without', 'div.kit-row', line=('identical',))
+        self.assertIn('<div.old-row>', out.splitlines()[0])
+
+    def test_without_tag_and_class_keeps_near_misses(self):
+        for label, row in [
+            ('longer class word', '<div class="kit-row-extra">x</div>'),
+            ('class in another case', '<div class="Kit-Row">x</div>'),
+            ('another tag', '<section class="kit-row">x</section>'),
+            ('another attribute', '<div data-class="kit-row">x</div>'),
+            ('no class', '<div>x</div>'),
+        ]:
+            with self.subTest(case=label):
+                before = self.rowed(f'<div class="kit-row">cut</div>{row}')
+                after = self.rowed(f'<div class="kit-row">also cut</div>{row.replace(">x<", ">y<")}')
+                self.assertStatus(1, before, after, '--without', 'div.kit-row', line=('pages whose content (outside the header) changed (1)',))
+
+    def test_without_tag_and_class_keeps_the_class_case_and_lowers_the_tag(self):
+        before = self.rowed('<DIV class="Kit-Row">old</DIV>')
+        after = self.rowed('<div class="Kit-Row">new</div>')
+        self.assertStatus(0, before, after, '--without', 'DIV.Kit-Row')
+        self.assertStatus(2, before, after, '--without', 'div.kit-row', line=('div.kit-row', 'no such element'))
+
+    def test_without_tag_and_class_must_match_in_either_build(self):
+        before = self.rowed('<div class="old-row">old</div>')
+        after = self.rowed('')
+        self.assertStatus(0, before, after, '--without', 'div.old-row', line=('identical',))
+        self.assertStatus(0, after, before, '--without', 'div.old-row', line=('identical',))
+        self.assertStatus(2, before, after, '--without', 'div.old-row', '--without', 'div.typo-row',
+                          line=('--without div.typo-row', 'no such element in either build'))
+        # A plain tag keeps its old rule: nothing to cut is no error.
+        self.assertStatus(1, before, after, '--without', 'aside')
 
 class Patterns(unittest.TestCase):
     """The script's two name patterns and the head's tags as printed, reached as functions."""
@@ -531,6 +702,21 @@ class Patterns(unittest.TestCase):
                      b'Base.Ab12Cd34.css\n']:
             with self.subTest(name=name):
                 self.assertIsNone(self.script.HASHED.fullmatch(name))
+
+    def test_without_pattern(self):
+        for spec in ['footer', 'div.lane-row', 'div.Kit_Row-2', 'DIV.x']:
+            with self.subTest(valid=spec):
+                self.assertIsNotNone(self.script.WITHOUT.fullmatch(spec))
+        for spec in ['', 'div.', '.lane-row', 'div.a.b', 'div.a b', 'div.a\n', 'div..a', '1div.a', 'div.a>']:
+            with self.subTest(invalid=spec):
+                self.assertIsNone(self.script.WITHOUT.fullmatch(spec))
+
+    def test_strip_elements_by_class_counts_what_it_cuts(self):
+        from collections import Counter
+        cut = Counter()
+        html = '<div class="a row"><div class="row">in</div></div><div class="rows">keep</div><div class=row>x</div><div class>y</div>'
+        self.assertEqual(self.script.strip_elements(html, ['div.row'], counts=cut), '<div class="rows">keep</div><div class>y</div>')
+        self.assertEqual(cut, Counter({'div.row': 2}))
 
     def test_tag_name_pattern(self):
         for tag in ['footer', 'FOOTER', 'h1', 'footer-note']:
