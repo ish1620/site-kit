@@ -41,6 +41,10 @@ general-purpose package.
   `src/pages/[...lang]/random.astro` drawing `RandomPage` with the slugs to pick from, is bare and
   jumps to one of them, never the page the visitor came from, before anything is drawn.
 - `site-kit/SiteFooter.astro`: the footer: the site's links (About, say), then "© year name".
+- `site-kit/NotFound.astro`: the body of the "page not found" page, in every language the site
+  has: the message as a heading in the default language, a line for each other language, and a
+  link to each language's home, named in that language. The site's `src/pages/404.astro` draws it
+  inside its own layout.
 - `scripts/wordmark.py <Archivo-VF.ttf> <text> <out>`: draws a text in Archivo Black Expanded as
   one SVG path in the text colour; with a site's `src/components/Wordmark.astro` as `<out>`, the
   output is the whole component. Run it from a site's folder beside the kit
@@ -48,7 +52,12 @@ general-purpose package.
   the sites.
 - `site-kit/routes`: `robotsTxt()` and `langRedirect()` for `/robots.txt` and `/lang-redirect.js`
   (which sites need the second: `langRedirect()`'s comment).
-- `site-kit/markdown`: `lineBreaks`, a Markdown rule that keeps single line breaks.
+- `site-kit/markdown`: rules for a site's Markdown processor (Markdown files, not MDX):
+  `lineBreaks` keeps single line breaks; `noRawHtml` stops the build on raw HTML in a text;
+  `figures(figure)` makes each image on a line of its own (a blank line before and after) the
+  figure the site's `figure({ src, alt, title, file })` describes, and stops the build on an image
+  anywhere else or written by reference. What stands inside an image's description is read as
+  words: the processor flattens it to alt text, which `figure()` judges.
 - `site-kit/headers`: `securityHeaders()`, an Astro integration that writes the shared `/*`
   security headers into `dist/_headers` ahead of the site's own rules.
 
