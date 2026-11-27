@@ -1,0 +1,40 @@
+---
+// The body of a "page not found" page. An address that doesn't exist has no language of its own,
+// so the page speaks every language the site has: the message as a heading in the default
+// language, a line for each other language, then a link to each language's home, named in that
+// language. A site with one language gets the heading and one link. The words are the kit's
+// (KIT_UI's notFound and home).
+// The page around it is the site's: its layout, its title (KIT_UI's notFound in the default
+// language), noindex and no alternates, in src/pages/404.astro.
+// The kit sets the links' tap height (44px) and nothing else. Type, colour and spacing are the
+// site's rules on .kit-notfound, .kit-notfound-translations and .kit-notfound-links; a rule that
+// sets what the one below sets takes two classes, since this loads after the site's stylesheet.
+// A class, or other attributes, go onto the wrapper.
+import type { Locales } from './i18n.js';
+
+interface Props {
+  i18n: Locales<any>; // the site's defineLocales() result
+  class?: string;
+  [attribute: string]: unknown;
+}
+
+const { i18n, class: className, ...attributes } = Astro.props;
+const { LOCALES, DEFAULT_LOCALE, LANG_TAG, KIT_UI, localePath } = i18n;
+const others = LOCALES.filter((l: string) => l !== DEFAULT_LOCALE);
+---
+
+<div class:list={['kit-notfound', className]} {...attributes}>
+  <h1>{KIT_UI[DEFAULT_LOCALE].notFound}</h1>
+  {others.length > 0 && (
+    <div class="kit-notfound-translations">
+      {others.map((l: string) => <p lang={LANG_TAG[l]}>{KIT_UI[l].notFound}</p>)}
+    </div>
+  )}
+  <p class="kit-notfound-links">
+    {LOCALES.map((l: string) => <a href={localePath(l)} lang={LANG_TAG[l]}>{KIT_UI[l].home}</a>)}
+  </p>
+</div>
+
+<style is:global>
+  .kit-notfound-links a { display: inline-flex; align-items: center; min-height: 44px; }
+</style>

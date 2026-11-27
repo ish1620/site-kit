@@ -7,6 +7,9 @@ export interface KitUI {
   pages: string;
   previousPage: string;
   nextPage: string;
+  /** The not-found page's message, and the name of its link to the language's home. */
+  notFound: string;
+  home: string;
 }
 
 export interface Language {

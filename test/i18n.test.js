@@ -33,3 +33,15 @@ test('another default language has no prefix of its own', () => {
 test('each language is named in itself, Chinese as 中文', () => {
   assert.deepEqual(i18n.LANG_NAME, { en: 'English', es: 'Español', ja: '日本語', zh: '中文' });
 });
+
+test('the not-found page has its message and its link home in every language, word for word', () => {
+  assert.deepEqual(
+    Object.fromEntries(i18n.LOCALES.map((l) => [l, [i18n.KIT_UI[l].notFound, i18n.KIT_UI[l].home]])),
+    {
+      en: ['Page not found', '← Home'],
+      es: ['Página no encontrada', '← Inicio'],
+      ja: ['ページが見つかりません', '← ホーム'],
+      zh: ['页面未找到', '← 首页'],
+    },
+  );
+});

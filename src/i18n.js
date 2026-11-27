@@ -11,13 +11,14 @@
 //   list (LanguageMenu). Chinese is 中文: the tag already says Simplified.
 // - nameEn: in English ("Spanish"): the "originally written in" line, English on every page.
 // - ui: the kit's own interface text in that language: what screen readers call the language
-//   links and the pager, its arrows, and the skip link.
+//   links and the pager, its arrows, the skip link, and the not-found page's message and its
+//   link home (NotFound).
 // A new language goes here once; then any site can add it to its list.
 export const LANGUAGES = {
-  en: { tag: 'en', og: 'en_US', name: 'English', nameEn: 'English', ui: { langNav: 'Language', skip: 'Skip to content', pages: 'Pages', previousPage: 'Previous page', nextPage: 'Next page' } },
-  es: { tag: 'es', og: 'es_ES', name: 'Español', nameEn: 'Spanish', ui: { langNav: 'Idioma', skip: 'Saltar al contenido', pages: 'Páginas', previousPage: 'Página anterior', nextPage: 'Página siguiente' } },
-  ja: { tag: 'ja', og: 'ja_JP', name: '日本語', nameEn: 'Japanese', ui: { langNav: '言語', skip: '本文へ移動', pages: 'ページ', previousPage: '前のページ', nextPage: '次のページ' } },
-  zh: { tag: 'zh-Hans', og: 'zh_CN', name: '中文', nameEn: 'Chinese', ui: { langNav: '语言', skip: '跳到正文', pages: '分页', previousPage: '上一页', nextPage: '下一页' } },
+  en: { tag: 'en', og: 'en_US', name: 'English', nameEn: 'English', ui: { langNav: 'Language', skip: 'Skip to content', pages: 'Pages', previousPage: 'Previous page', nextPage: 'Next page', notFound: 'Page not found', home: '← Home' } },
+  es: { tag: 'es', og: 'es_ES', name: 'Español', nameEn: 'Spanish', ui: { langNav: 'Idioma', skip: 'Saltar al contenido', pages: 'Páginas', previousPage: 'Página anterior', nextPage: 'Página siguiente', notFound: 'Página no encontrada', home: '← Inicio' } },
+  ja: { tag: 'ja', og: 'ja_JP', name: '日本語', nameEn: 'Japanese', ui: { langNav: '言語', skip: '本文へ移動', pages: 'ページ', previousPage: '前のページ', nextPage: '次のページ', notFound: 'ページが見つかりません', home: '← ホーム' } },
+  zh: { tag: 'zh-Hans', og: 'zh_CN', name: '中文', nameEn: 'Chinese', ui: { langNav: '语言', skip: '跳到正文', pages: '分页', previousPage: '上一页', nextPage: '下一页', notFound: '页面未找到', home: '← 首页' } },
 };
 
 export function defineLocales({ locales, defaultLocale }) {
